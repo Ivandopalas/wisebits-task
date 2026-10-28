@@ -6,6 +6,7 @@
   import Avatar from '#lib/components/Avatar.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import Spinner from '#lib/components/Spinner.svelte';
+  import { syncPresence } from '#lib/realtime.js';
   import { conversations } from '#lib/stores/conversations.js';
   import { presence } from '#lib/stores/presence.js';
 
@@ -34,6 +35,7 @@
       users = page.items;
       nextCursor = page.nextCursor;
       status = 'ready';
+      void syncPresence(page.items.map((u) => u.id));
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       error = errorMessage(e);
@@ -50,6 +52,7 @@
       });
       users = [...users, ...page.items];
       nextCursor = page.nextCursor;
+      void syncPresence(page.items.map((u) => u.id));
     } catch (e) {
       error = errorMessage(e);
     } finally {

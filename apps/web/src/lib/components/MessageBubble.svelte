@@ -20,7 +20,7 @@
 >
   <div
     class={[
-      'max-w-[85%] rounded-2xl px-3 py-1.5 text-sm shadow-xs sm:max-w-[70%]',
+      'max-w-[85%] rounded-2xl px-3 py-1.5 text-sm shadow-xs sm:max-w-[min(70%,40rem)]',
       mine ? 'rounded-br-md bg-indigo-600 text-white' : 'rounded-bl-md bg-white text-gray-900',
       message.status === 'failed' && 'bg-red-50 text-red-900 ring-1 ring-red-200',
     ]}

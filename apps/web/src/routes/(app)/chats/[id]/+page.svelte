@@ -33,7 +33,9 @@
   let text = $state('');
   let scroller = $state<HTMLElement>();
   let composer = $state<HTMLTextAreaElement>();
-  let stickToBottom = true;
+  let stickToBottom = $state(true);
+  /** Messages that arrived while the reader was scrolled up. */
+  let newBelow = $state(0);
   let visible = $state(document.visibilityState === 'visible');
   let typingSent = false;
   let typingTimer: ReturnType<typeof setTimeout> | undefined;
@@ -55,17 +57,27 @@
     return () => stopTyping(conversationId);
   });
 
-  // New messages at the bottom: follow them if the user is already there or sent one.
+  // New messages at the bottom: follow them if the user is already there or sent one,
+  // otherwise count them on the "jump to latest" button.
   $effect(() => {
     const last = items.at(-1);
     if (!last) return;
     const mine = last.senderId === $currentUser?.id;
-    void tick().then(() => {
-      if (scroller && (stickToBottom || mine)) {
-        scroller.scrollTop = scroller.scrollHeight;
+    untrack(() => {
+      if (stickToBottom || mine) {
+        void tick().then(scrollToBottom);
+      } else {
+        newBelow += 1;
       }
     });
   });
+
+  function scrollToBottom() {
+    if (!scroller) return;
+    scroller.scrollTop = scroller.scrollHeight;
+    stickToBottom = true;
+    newBelow = 0;
+  }
 
   // Seeing the conversation is reading it.
   $effect(() => {
@@ -91,6 +103,7 @@
     if (!scroller) return;
     stickToBottom =
       scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < NEAR_BOTTOM_PX;
+    if (stickToBottom) newBelow = 0;
     if (scroller.scrollTop < NEAR_TOP_PX && thread?.hasMore && !thread.loadingOlder) {
       // Keep the message under the reader's eyes in place while older ones are prepended.
       const fromBottom = scroller.scrollHeight - scroller.scrollTop;
@@ -176,52 +189,72 @@
     {/if}
   </header>
 
-  <div
-    bind:this={scroller}
-    onscroll={onScroll}
-    class="min-h-0 flex-1 overflow-y-auto bg-gray-50 px-3 py-4 sm:px-6"
-    data-testid="message-list"
-  >
-    {#if !thread || (thread.status === 'loading' && items.length === 0)}
-      <div class="flex h-full items-center justify-center"><Spinner /></div>
-    {:else if thread.status === 'error' && items.length === 0}
-      <ErrorState
-        message={thread.error ?? 'Could not load messages.'}
-        onretry={() => messages.loadLatest(id)}
-      />
-    {:else if items.length === 0}
-      <p class="flex h-full items-center justify-center text-sm text-gray-500">
-        No messages yet. Say hello!
-      </p>
-    {:else}
-      {#if thread.loadingOlder}
-        <div class="flex justify-center pb-3"><Spinner /></div>
-      {:else if !thread.hasMore}
-        <p class="pb-3 text-center text-xs text-gray-400">
-          This is the beginning of the conversation
+  <div class="relative flex min-h-0 flex-1 flex-col">
+    <div
+      bind:this={scroller}
+      onscroll={onScroll}
+      class="min-h-0 flex-1 overflow-y-auto bg-gray-50 px-3 py-4 sm:px-6"
+      data-testid="message-list"
+    >
+      {#if !thread || (thread.status === 'loading' && items.length === 0)}
+        <div class="flex h-full items-center justify-center"><Spinner /></div>
+      {:else if thread.status === 'error' && items.length === 0}
+        <ErrorState
+          message={thread.error ?? 'Could not load messages.'}
+          onretry={() => messages.loadLatest(id)}
+        />
+      {:else if items.length === 0}
+        <p class="flex h-full items-center justify-center text-sm text-gray-500">
+          No messages yet. Say hello!
         </p>
+      {:else}
+        {#if thread.loadingOlder}
+          <div class="flex justify-center pb-3"><Spinner /></div>
+        {:else if !thread.hasMore}
+          <p class="pb-3 text-center text-xs text-gray-400">
+            This is the beginning of the conversation
+          </p>
+        {/if}
+        {#each groups as group (group.day)}
+          <section aria-label={formatDayLabel(group.day)}>
+            <div class="sticky top-0 z-10 flex justify-center py-2">
+              <span
+                class="rounded-full bg-white/90 px-3 py-0.5 text-xs font-medium text-gray-500 shadow-xs"
+              >
+                {formatDayLabel(group.day)}
+              </span>
+            </div>
+            <ul class="flex flex-col gap-1">
+              {#each group.items as message (message.key)}
+                <MessageBubble
+                  {message}
+                  mine={message.senderId === $currentUser?.id}
+                  read={message.seq !== null && message.seq <= (conversation?.peerLastReadSeq ?? 0)}
+                  onretry={() => messages.retry(id, message.clientMessageId)}
+                />
+              {/each}
+            </ul>
+          </section>
+        {/each}
       {/if}
-      {#each groups as group (group.day)}
-        <section aria-label={formatDayLabel(group.day)}>
-          <div class="sticky top-0 z-10 flex justify-center py-2">
-            <span
-              class="rounded-full bg-white/90 px-3 py-0.5 text-xs font-medium text-gray-500 shadow-xs"
-            >
-              {formatDayLabel(group.day)}
-            </span>
-          </div>
-          <ul class="flex flex-col gap-1">
-            {#each group.items as message (message.key)}
-              <MessageBubble
-                {message}
-                mine={message.senderId === $currentUser?.id}
-                read={message.seq !== null && message.seq <= (conversation?.peerLastReadSeq ?? 0)}
-                onretry={() => messages.retry(id, message.clientMessageId)}
-              />
-            {/each}
-          </ul>
-        </section>
-      {/each}
+    </div>
+    {#if !stickToBottom && items.length > 0}
+      <button
+        type="button"
+        class="absolute right-4 bottom-4 flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-md ring-1 ring-gray-200 hover:bg-gray-50"
+        onclick={scrollToBottom}
+        data-testid="jump-to-latest"
+      >
+        {#if newBelow > 0}
+          <span class="rounded-full bg-indigo-600 px-1.5 text-xs leading-5 text-white"
+            >{newBelow}</span
+          >
+        {/if}
+        Latest
+        <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"
+          ><path d="M10 14.5 4.3 8.8a1 1 0 0 1 1.4-1.4L10 11.7l4.3-4.3a1 1 0 1 1 1.4 1.4z" /></svg
+        >
+      </button>
     {/if}
   </div>
 
