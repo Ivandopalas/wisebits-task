@@ -30,6 +30,10 @@ export function startRealtime(): void {
   });
 
   socket.on('message:new', ({ message, conversation }) => {
+    // A conversation we have not seen before: nobody has told us yet whether this peer is online.
+    if (!(conversation.peer.id in get(presence))) {
+      void syncPresence([conversation.peer.id]);
+    }
     conversations.upsert(conversation);
     messages.receive(message);
     if (message.senderId !== myId()) {
