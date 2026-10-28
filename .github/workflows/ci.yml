@@ -43,7 +43,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter @chat/web...
-      - run: pnpm --filter @chat/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @chat/web exec playwright install --with-deps chromium firefox
       - name: Start the stack
         run: docker compose up -d --build --wait
       - run: pnpm test:e2e

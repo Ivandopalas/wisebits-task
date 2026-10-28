@@ -101,7 +101,7 @@ pnpm test
 
 ```bash
 docker compose up -d --build --wait
-pnpm --filter @chat/web exec playwright install chromium
+pnpm --filter @chat/web exec playwright install chromium firefox
 pnpm test:e2e
 ```
 
