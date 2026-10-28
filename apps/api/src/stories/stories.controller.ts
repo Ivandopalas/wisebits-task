@@ -15,7 +15,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { createStorySchema, LIMITS, objectIdSchema, storyVideoQuerySchema } from '@chat/shared';
 import type { Response } from 'express';
 import { pipeline } from 'node:stream/promises';
@@ -36,6 +36,16 @@ export class StoriesController {
   /** multipart/form-data: `video` (WebM or MP4, up to 25 MB) and `durationMs`. */
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['video', 'durationMs'],
+      properties: {
+        video: { type: 'string', format: 'binary', description: 'WebM or MP4, up to 25 MB' },
+        durationMs: { type: 'integer', minimum: 1, maximum: 15_500 },
+      },
+    },
+  })
   @Post()
   @UseInterceptors(
     // Multer's default memory storage: the signature is checked before anything is stored,

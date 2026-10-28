@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch --preserveWatchOutput",
+    "dev": "nest start --watch --preserveWatchOutput --exec \"node --env-file-if-exists=../../.env\"",
     "start": "node dist/main.js",
     "seed": "node --env-file-if-exists=../../.env dist/seed.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
