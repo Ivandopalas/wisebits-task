@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
+onlyBuiltDependencies:
+  - '@swc/core'
+  - argon2
+  - esbuild
+
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+  - mongodb-memory-server

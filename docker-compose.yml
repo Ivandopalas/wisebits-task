@@ -1,0 +1,73 @@
+name: realtime-chat
+
+services:
+  mongo:
+    image: mongo:8.0.34
+    # A single-node replica set: transactions and change streams need one.
+    command: ['--replSet', 'rs0', '--bind_ip_all', '--quiet']
+    ports:
+      - '127.0.0.1:${MONGO_PORT:-27017}:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first start, afterwards just reports its state.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/chat?replicaSet=rs0
+      JWT_SECRET: ${JWT_SECRET:-local-demo-secret-change-me-for-anything-real}
+      # The demo is served over plain http://localhost; behind TLS this must be true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: 'true'
+      AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    deploy:
+      replicas: 2
+    stop_grace_period: 20s
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      PROTOCOL_HEADER: x-forwarded-proto
+      HOST_HEADER: x-forwarded-host
+      ADDRESS_HEADER: x-forwarded-for
+      XFF_DEPTH: '1'
+
+  nginx:
+    image: nginx:1.30.6-alpine
+    ports:
+      - '${APP_PORT:-8080}:80'
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/nginx-health']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+volumes:
+  mongo-data:

@@ -1,0 +1,156 @@
+import type { AckResponse, MessageDto, MessagesPage, WsSendMessagePayload } from '@chat/shared';
+import { get } from 'svelte/store';
+import { describe, expect, it, vi } from 'vitest';
+import { createMessagesStore, type MessagesTransport } from './messages.js';
+
+vi.mock('../socket/client.js', () => ({ request: vi.fn() }));
+vi.mock('./auth.js', () => ({ auth: { subscribe: () => () => undefined } }));
+
+const CONVERSATION = 'c1';
+const ME = 'me';
+
+function message(seq: number, overrides: Partial<MessageDto> = {}): MessageDto {
+  return {
+    id: `m${seq}`,
+    conversationId: CONVERSATION,
+    seq,
+    senderId: 'peer',
+    text: `message ${seq}`,
+    clientMessageId: `client-${seq}`,
+    createdAt: new Date(2026, 9, 28, 12, seq).toISOString(),
+    ...overrides,
+  };
+}
+
+function setup(pages: MessagesPage[] = [{ items: [message(1), message(2)], hasMore: false }]) {
+  const sent: WsSendMessagePayload[] = [];
+  let reply: (payload: WsSendMessagePayload) => Promise<AckResponse<MessageDto>> = async (p) => ({
+    ok: true,
+    data: message(3, { senderId: ME, text: p.text, clientMessageId: p.clientMessageId }),
+  });
+  const transport: MessagesTransport = {
+    fetchPage: vi.fn(async () => pages.shift() ?? { items: [], hasMore: false }),
+    send: (payload) => {
+      sent.push(payload);
+      return reply(payload);
+    },
+  };
+  const store = createMessagesStore(transport, () => ME);
+  return {
+    store,
+    transport,
+    sent,
+    replyWith: (fn: typeof reply) => (reply = fn),
+    items: () => get(store)[CONVERSATION]!.items,
+  };
+}
+
+describe('messages store', () => {
+  it('loads the latest page into a ready thread', async () => {
+    const { store, items } = setup();
+    await store.loadLatest(CONVERSATION);
+    expect(get(store)[CONVERSATION]!.status).toBe('ready');
+    expect(items().map((m) => m.seq)).toEqual([1, 2]);
+  });
+
+  it('shows a sent message immediately, then swaps in the confirmed copy', async () => {
+    const { store, items, replyWith } = setup();
+    await store.loadLatest(CONVERSATION);
+
+    let confirm!: (ack: AckResponse<MessageDto>) => void;
+    replyWith(() => new Promise((resolve) => (confirm = resolve)));
+    const sending = store.send(CONVERSATION, 'hello');
+
+    expect(items().at(-1)).toMatchObject({ text: 'hello', status: 'sending', seq: null });
+    const { clientMessageId } = items().at(-1)!;
+    confirm({ ok: true, data: message(3, { senderId: ME, text: 'hello', clientMessageId }) });
+    await sending;
+
+    expect(items()).toHaveLength(3);
+    expect(items().at(-1)).toMatchObject({ seq: 3, status: 'sent', key: clientMessageId });
+  });
+
+  it('does not duplicate when the socket echo arrives before the ack', async () => {
+    const { store, items, replyWith } = setup();
+    await store.loadLatest(CONVERSATION);
+
+    replyWith(async (payload) => {
+      const echoed = message(3, {
+        senderId: ME,
+        text: payload.text,
+        clientMessageId: payload.clientMessageId,
+      });
+      store.receive(echoed);
+      return { ok: true, data: echoed };
+    });
+    await store.send(CONVERSATION, 'hi');
+
+    expect(items().map((m) => m.seq)).toEqual([1, 2, 3]);
+  });
+
+  it('marks a message failed and retries it with the same client id', async () => {
+    const { store, items, sent, replyWith } = setup();
+    await store.loadLatest(CONVERSATION);
+
+    replyWith(() => Promise.reject(new Error('timeout')));
+    await store.send(CONVERSATION, 'flaky');
+    expect(items().at(-1)).toMatchObject({ status: 'failed', retryable: true });
+
+    replyWith(async (payload) => ({
+      ok: true,
+      data: message(3, {
+        senderId: ME,
+        text: payload.text,
+        clientMessageId: payload.clientMessageId,
+      }),
+    }));
+    await store.retryFailed();
+
+    expect(sent).toHaveLength(2);
+    expect(sent[0]!.clientMessageId).toBe(sent[1]!.clientMessageId);
+    expect(items().at(-1)).toMatchObject({ status: 'sent', seq: 3 });
+  });
+
+  it('does not auto-retry a message the server rejected as invalid', async () => {
+    const { store, items, sent, replyWith } = setup();
+    await store.loadLatest(CONVERSATION);
+    replyWith(async () => ({
+      ok: false,
+      error: { statusCode: 403, error: 'Forbidden', message: 'Not a participant' },
+    }));
+    await store.send(CONVERSATION, 'nope');
+    await store.retryFailed();
+
+    expect(sent).toHaveLength(1);
+    expect(items().at(-1)).toMatchObject({
+      status: 'failed',
+      retryable: false,
+      error: 'Not a participant',
+    });
+  });
+
+  it('keeps messages ordered by seq whatever order they arrive in', async () => {
+    const { store, items } = setup();
+    await store.loadLatest(CONVERSATION);
+    store.receive(message(5));
+    store.receive(message(4));
+    store.receive(message(5));
+    expect(items().map((m) => m.seq)).toEqual([1, 2, 4, 5]);
+  });
+
+  it('prepends older pages and catches up from the last confirmed seq', async () => {
+    const { store, transport, items } = setup([
+      { items: [message(3), message(4)], hasMore: true },
+      { items: [message(1), message(2)], hasMore: false },
+      { items: [message(5)], hasMore: false },
+    ]);
+    await store.loadLatest(CONVERSATION);
+    await store.loadOlder(CONVERSATION);
+    expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { before: 3, limit: 30 });
+    expect(get(store)[CONVERSATION]!.hasMore).toBe(false);
+
+    await store.catchUp(CONVERSATION);
+    expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { after: 4, limit: 100 });
+    expect(items().map((m) => m.seq)).toEqual([1, 2, 3, 4, 5]);
+  });
+});

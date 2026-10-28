@@ -1,0 +1,31 @@
+{
+  "name": "realtime-chat",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=22.17"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @chat/shared build && pnpm --parallel --filter @chat/shared --filter @chat/api --filter @chat/web dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm --filter @chat/shared build && pnpm -r typecheck",
+    "test": "pnpm --filter @chat/shared build && pnpm -r test",
+    "test:e2e": "pnpm --filter @chat/web test:e2e",
+    "seed": "pnpm --filter @chat/api seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-svelte": "3.23.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "prettier-plugin-svelte": "4.1.1",
+    "svelte": "5.57.3",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1"
+  }
+}

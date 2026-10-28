@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+**/coverage
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
+.git
+.github
+.env
+.env.*
+!.env.example
+*.md
