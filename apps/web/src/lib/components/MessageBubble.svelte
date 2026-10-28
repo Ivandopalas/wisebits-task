@@ -48,16 +48,16 @@
         {:else if message.status === 'sent'}
           <span title={read ? 'Read' : 'Sent'} data-testid={read ? 'message-read' : 'message-sent'}>
             <svg
-              class="size-4"
-              viewBox="0 0 20 16"
+              class="h-4 w-5"
+              viewBox="0 0 17 16"
               fill="none"
               stroke="currentColor"
               stroke-width="1.6"
               stroke-linecap="round"
               stroke-linejoin="round"
             >
-              <path d="M2 8.5l3.5 3.5L12 4.5" />
-              {#if read}<path d="M8.5 12L15 4.5" />{/if}
+              <path d="M1.5 8.5 5 12l6.5-7.5" />
+              {#if read}<path d="m7 10.5 1.5 1.5 6.5-7.5" />{/if}
             </svg>
           </span>
         {/if}

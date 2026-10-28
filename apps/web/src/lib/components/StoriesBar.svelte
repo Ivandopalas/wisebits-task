@@ -17,7 +17,7 @@
 </script>
 
 <div
-  class="flex gap-3 overflow-x-auto border-b border-gray-200 px-4 py-3"
+  class="flex gap-3 overflow-x-auto border-b border-gray-200 px-4 py-3 [scrollbar-width:none]"
   data-testid="stories-bar"
 >
   <div class="flex w-16 shrink-0 flex-col items-center gap-1">
