@@ -22,6 +22,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       response.end();
       return;
     }
-    response.status(error.statusCode).json({ ...error, requestId: String(request.id ?? '') });
+    // Errors raised before the logger middleware (an oversized body) have no request.id yet;
+    // nginx's header still identifies the request.
+    const requestId = request.id ?? request.headers['x-request-id'];
+    response
+      .status(error.statusCode)
+      .json({ ...error, ...(requestId !== undefined && { requestId: String(requestId) }) });
   }
 }

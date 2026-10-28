@@ -50,8 +50,8 @@
         .then((c) => syncPresence([c.peer.id]))
         .catch((error: unknown) => (conversationError = errorMessage(error)));
       void messages.loadLatest(conversationId);
+      composer?.focus();
     });
-    composer?.focus();
     return () => stopTyping(conversationId);
   });
 

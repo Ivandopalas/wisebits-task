@@ -37,6 +37,19 @@ describe('health', () => {
     expect(res.body.requestId).toBeTruthy();
   });
 
+  it('rejects oversized JSON bodies in the common error format', async () => {
+    const res = await request(t.url)
+      .post('/api/auth/login')
+      .set('X-Request-Id', 'big-body')
+      .send({ email: 'a@b.co', password: 'x'.repeat(200_000) })
+      .expect(413);
+    expect(res.body).toMatchObject({
+      statusCode: 413,
+      error: 'Payload Too Large',
+      requestId: 'big-body',
+    });
+  });
+
   it('serves the OpenAPI document', async () => {
     const res = await request(t.url).get('/api/docs-json').expect(200);
     expect(res.body.info.title).toBe('Realtime Chat API');
