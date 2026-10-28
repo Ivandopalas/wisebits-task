@@ -123,11 +123,13 @@ test('history loads older messages when scrolling up', async ({ browser }) => {
 
   // Reading old messages, Bob is not yanked to the bottom by a new one; a button offers to jump.
   await sendMessage(alice.page, 'a fresh one');
+  await sendMessage(alice.page, 'and one more');
   const jump = bob.page.getByTestId('jump-to-latest');
-  await expect(jump).toContainText('1');
-  await expect(list.getByText('history 1', { exact: true })).toBeInViewport();
+  await expect(list).toContainText('and one more');
+  await expect(jump.locator('span').first()).toHaveText('2');
+  await expect(list.getByText('a fresh one')).not.toBeInViewport();
   await jump.click();
-  await expect(list.getByText('a fresh one')).toBeInViewport();
+  await expect(list.getByText('and one more')).toBeInViewport();
   await expect(jump).toBeHidden();
 
   await alice.context.close();

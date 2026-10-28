@@ -28,14 +28,22 @@
   const items = $derived(thread?.items ?? []);
   const groups = $derived(groupByDay(items));
   const peerTyping = $derived(Boolean($typing[id]));
+  /** Messages from the peer that arrived below while the reader was scrolled up. */
+  const newBelow = $derived.by(() => {
+    const from = anchorKey ? items.findIndex((m) => m.key === anchorKey) : -1;
+    return from === -1
+      ? 0
+      : items.slice(from + 1).filter((m) => m.senderId !== $currentUser?.id).length;
+  });
 
   let conversationError = $state<string | null>(null);
   let text = $state('');
   let scroller = $state<HTMLElement>();
   let composer = $state<HTMLTextAreaElement>();
   let stickToBottom = $state(true);
-  /** Messages that arrived while the reader was scrolled up. */
-  let newBelow = $state(0);
+  /** The last message at the moment the reader scrolled away from the bottom. */
+  let anchorKey = $state<string | null>(null);
+  let lastKey: string | undefined;
   let visible = $state(document.visibilityState === 'visible');
   let typingSent = false;
   let typingTimer: ReturnType<typeof setTimeout> | undefined;
@@ -47,6 +55,8 @@
       conversationError = null;
       text = '';
       stickToBottom = true;
+      anchorKey = null;
+      lastKey = undefined;
       conversations
         .ensure(conversationId)
         .then((c) => syncPresence([c.peer.id]))
@@ -57,26 +67,23 @@
     return () => stopTyping(conversationId);
   });
 
-  // New messages at the bottom: follow them if the user is already there or sent one,
-  // otherwise count them on the "jump to latest" button.
+  // A new last message: follow it if the reader is already at the bottom or sent it. Store
+  // updates that do not add a message (a confirmation, a catch-up) leave the view alone.
   $effect(() => {
     const last = items.at(-1);
-    if (!last) return;
+    if (!last || last.key === lastKey) return;
+    lastKey = last.key;
     const mine = last.senderId === $currentUser?.id;
-    untrack(() => {
-      if (stickToBottom || mine) {
-        void tick().then(scrollToBottom);
-      } else {
-        newBelow += 1;
-      }
-    });
+    if (untrack(() => stickToBottom) || mine) {
+      void tick().then(scrollToBottom);
+    }
   });
 
   function scrollToBottom() {
     if (!scroller) return;
     scroller.scrollTop = scroller.scrollHeight;
     stickToBottom = true;
-    newBelow = 0;
+    anchorKey = null;
   }
 
   // Seeing the conversation is reading it.
@@ -101,9 +108,12 @@
 
   async function onScroll() {
     if (!scroller) return;
-    stickToBottom =
+    const atBottom =
       scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < NEAR_BOTTOM_PX;
-    if (stickToBottom) newBelow = 0;
+    if (atBottom !== stickToBottom) {
+      stickToBottom = atBottom;
+      anchorKey = atBottom ? null : (items.at(-1)?.key ?? null);
+    }
     if (scroller.scrollTop < NEAR_TOP_PX && thread?.hasMore && !thread.loadingOlder) {
       // Keep the message under the reader's eyes in place while older ones are prepended.
       const fromBottom = scroller.scrollHeight - scroller.scrollTop;
