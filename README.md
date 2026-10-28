@@ -94,10 +94,11 @@ pnpm test
   messages, receipts, typing, presence and story announcements cross between them.
 - **Web** (Vitest): the stores (optimistic sending, retries, ordering, catch-up, unread and read
   state, auth refresh deduplication) and utilities.
-- **End to end** (Playwright, Chromium with a fake camera) against the Compose stack: sign-up and
-  route guards, two browsers chatting live, typing and read receipts, a second tab, recovery from
-  a dropped connection, history paging, and a story recorded until it stops itself at 15 seconds
-  and shows up for another user.
+- **End to end** (Playwright, Chromium and Firefox with fake cameras) against the Compose stack:
+  sign-up and route guards, two browsers chatting live, typing and read receipts, a second tab,
+  recovery from a dropped connection, history paging, and a story recorded until it stops itself
+  at 15 seconds and shows up for another user. Every main screen is also checked at widths from
+  320 to 1920 px for horizontal scrolling and for controls staying in view.
 
 ```bash
 docker compose up -d --build --wait
