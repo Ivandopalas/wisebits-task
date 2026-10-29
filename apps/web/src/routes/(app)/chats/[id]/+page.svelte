@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { LIMITS, type ConversationDto } from '@chat/shared';
   import { tick, untrack } from 'svelte';
-  import { errorMessage } from '#lib/api/http.js';
+  import { ApiRequestError, errorMessage } from '#lib/api/http.js';
   import Avatar from '#lib/components/Avatar.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import MessageBubble from '#lib/components/MessageBubble.svelte';
@@ -35,7 +35,7 @@
       : items.slice(from + 1).filter((m) => m.senderId !== $currentUser?.id).length;
   });
 
-  let conversationError = $state<string | null>(null);
+  let conversationError = $state<{ message: string; retryable: boolean } | null>(null);
   let text = $state('');
   let scroller = $state<HTMLElement>();
   let composer = $state<HTMLTextAreaElement>();
@@ -55,10 +55,7 @@
       stickToBottom = true;
       anchorKey = null;
       lastKey = undefined;
-      conversations
-        .ensure(conversationId)
-        .then((c) => syncPresence([c.peer.id]))
-        .catch((error: unknown) => (conversationError = errorMessage(error)));
+      loadConversation(conversationId);
       void messages.loadLatest(conversationId);
       composer?.focus();
     });
@@ -76,6 +73,26 @@
       void tick().then(scrollToBottom);
     }
   });
+
+  function loadConversation(conversationId: string) {
+    conversationError = null;
+    conversations
+      .ensure(conversationId)
+      .then((c) => syncPresence([c.peer.id]))
+      .catch((error: unknown) => (conversationError = describeProblem(error)));
+  }
+
+  // A mistyped or foreign link is not something to retry.
+  function describeProblem(error: unknown) {
+    const status = error instanceof ApiRequestError ? error.status : 0;
+    if (status === 400 || status === 404) {
+      return { message: 'Conversation not found.', retryable: false };
+    }
+    if (status === 403) {
+      return { message: 'You are not part of this conversation.', retryable: false };
+    }
+    return { message: errorMessage(error), retryable: true };
+  }
 
   function scrollToBottom() {
     if (!scroller) return;
@@ -149,7 +166,18 @@
 </svelte:head>
 
 {#if conversationError}
-  <ErrorState message={conversationError} />
+  <div class="flex flex-1 flex-col items-center justify-center">
+    <ErrorState
+      message={conversationError.message}
+      onretry={conversationError.retryable ? () => loadConversation(id) : undefined}
+    />
+    <a
+      href={resolve('/(app)/chats')}
+      class="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+    >
+      Back to chats
+    </a>
+  </div>
 {:else}
   <header class="flex items-center gap-3 border-b border-gray-200 px-4 py-2.5">
     <a

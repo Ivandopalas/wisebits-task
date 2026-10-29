@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
-  import type { Page, UserDto } from '@chat/shared';
+  import { LIMITS, type Page, type UserDto } from '@chat/shared';
   import { api, errorMessage } from '#lib/api/http.js';
   import Avatar from '#lib/components/Avatar.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
@@ -106,6 +106,7 @@
     type="search"
     placeholder="Search by username"
     aria-label="Search by username"
+    maxlength={LIMITS.usernameMax}
     bind:value={query}
     class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20"
   />

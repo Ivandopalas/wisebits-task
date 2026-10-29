@@ -154,6 +154,26 @@ test('a conversation the peer opened survives a reload and a reconnect', async (
   await bob.context.close();
 });
 
+test('a broken conversation link and an overlong search are no dead ends', async ({ browser }) => {
+  const { page, context } = await signedInUser(browser);
+  // On a phone the conversation list is hidden behind the open conversation.
+  await page.setViewportSize({ width: 375, height: 800 });
+  for (const id of ['zzz', '6720f0c0a1b2c3d4e5f60718']) {
+    await page.goto(`/chats/${id}`);
+    await expect(page.getByRole('alert')).toHaveText('Conversation not found.');
+  }
+  await page.getByRole('link', { name: 'Back to chats' }).click();
+  await expect(page).toHaveURL(/\/chats$/);
+
+  await page.getByRole('link', { name: 'People', exact: true }).click();
+  const search = page.getByRole('searchbox', { name: 'Search by username' });
+  await search.pressSequentially('x'.repeat(30));
+  await expect(search).toHaveValue('x'.repeat(24));
+  await expect(page.getByText(`Nobody found for “${'x'.repeat(24)}”.`)).toBeVisible();
+
+  await context.close();
+});
+
 test('history loads older messages when scrolling up', async ({ browser }) => {
   const alice = await signedInUser(browser);
   const bob = await signedInUser(browser);
