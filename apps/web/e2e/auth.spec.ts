@@ -132,6 +132,35 @@ test('restoring the session shows a loading screen; an unreachable server says s
   await context.close();
 });
 
+test('no screen trips the Content-Security-Policy', async ({ browser, page }) => {
+  const watch = () => {
+    const seen: string[] = [];
+    Object.assign(window, { cspViolations: seen });
+    document.addEventListener('securitypolicyviolation', (event) =>
+      seen.push(`${event.violatedDirective} ${event.blockedURI}`),
+    );
+  };
+  const violations = (target: typeof page) =>
+    target.evaluate(() => (window as unknown as { cspViolations: string[] }).cspViolations);
+
+  await page.addInitScript(watch);
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('nobody@example.com');
+  await page.getByLabel('Password').fill('wrong-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  expect(await violations(page)).toEqual([]);
+
+  const user = await signedInUser(browser);
+  await user.page.addInitScript(watch);
+  for (const path of ['/chats', '/users', '/stories/new']) {
+    await user.page.goto(path);
+    await expect(user.page.getByTestId('current-user')).toBeVisible();
+    expect(await violations(user.page), path).toEqual([]);
+  }
+  await user.context.close();
+});
+
 test('the session survives a reload and ends with sign out', async ({ browser }) => {
   const user = await signedInUser(browser);
   const { page } = user;
