@@ -250,7 +250,8 @@ OpenAPI documentation: <http://localhost:8080/api/docs> (JSON at `/api/docs-json
 | DELETE | `/api/stories/:id`                      | delete my story                                              |
 | GET    | `/api/health/live`, `/api/health/ready` | liveness, readiness (pings MongoDB)                          |
 
-Errors always look like `{ statusCode, error, message, details?, requestId }`.
+Errors always look like `{ statusCode, error, message, details?, requestId }`, including the
+ones nginx produces itself for `/api` (rate limit, upload size, API unavailable).
 
 Socket.io (path `/socket.io`, `auth: { token }` in the handshake; a rejected handshake carries
 `data.code` of `TOKEN_EXPIRED` or `UNAUTHORIZED`):

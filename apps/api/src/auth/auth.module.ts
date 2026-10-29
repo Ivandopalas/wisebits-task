@@ -12,6 +12,9 @@ import { Session, SessionSchema } from './session.schema.js';
 import { SessionsService } from './sessions.service.js';
 import { TokensService } from './tokens.service.js';
 
+// nginx answers with the same text when its own, shared limit trips first.
+const TOO_MANY_ATTEMPTS = 'Too many attempts. Wait a minute and try again.';
+
 @Global()
 @Module({
   imports: [
@@ -32,6 +35,7 @@ import { TokensService } from './tokens.service.js';
         throttlers: [
           { name: 'auth', ttl: 60_000, limit: config.get('AUTH_RATE_LIMIT_PER_MINUTE') },
         ],
+        errorMessage: TOO_MANY_ATTEMPTS,
       }),
     }),
   ],

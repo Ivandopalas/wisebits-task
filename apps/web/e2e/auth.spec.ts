@@ -96,6 +96,42 @@ test('a form sent before the scripts load never puts the password in the address
   await expect(page).toHaveURL(/\/chats$/);
 });
 
+test('restoring the session shows a loading screen; an unreachable server says so', async ({
+  browser,
+}) => {
+  const { page, context } = await signedInUser(browser);
+
+  // A slow refresh: the page must not stay blank meanwhile.
+  await page.route('**/api/auth/refresh', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await route.continue();
+  });
+  await page.reload();
+  await expect(page.locator('#app-loading')).toBeVisible();
+  await expect(page.getByTestId('current-user')).toBeVisible();
+  await expect(page.locator('#app-loading')).toHaveCount(0);
+
+  // The API is down and nginx answers for it.
+  await page.unroute('**/api/auth/refresh');
+  await page.route('**/api/auth/refresh', (route) =>
+    route.fulfill({
+      status: 502,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        statusCode: 502,
+        error: 'Bad Gateway',
+        message: 'The server is not available right now. Try again in a moment.',
+      }),
+    }),
+  );
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'The server is not reachable' })).toBeVisible();
+  await expect(page.getByText('The server is not available right now.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
+
+  await context.close();
+});
+
 test('the session survives a reload and ends with sign out', async ({ browser }) => {
   const user = await signedInUser(browser);
   const { page } = user;

@@ -108,11 +108,22 @@ export async function parse<T>(response: Response): Promise<T> {
         : {
             statusCode: response.status,
             error: response.statusText || 'Error',
-            message: 'Something went wrong. Please try again.',
+            message: fallbackMessage(response.status),
           },
     );
   }
   return body as T;
+}
+
+/** For error responses that did not come from the API itself (a proxy, a gateway). */
+function fallbackMessage(status: number): string {
+  if (status === 429) {
+    return 'Too many attempts. Wait a minute and try again.';
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return 'The server is not available right now. Try again in a moment.';
+  }
+  return 'Something went wrong. Please try again.';
 }
 
 function isApiError(value: unknown): value is ApiError {

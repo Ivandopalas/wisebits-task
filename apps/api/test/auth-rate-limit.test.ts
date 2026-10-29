@@ -22,7 +22,11 @@ describe('auth rate limit', () => {
       await attempt().expect(401);
     }
     const blocked = await attempt().expect(429);
-    expect(blocked.body).toMatchObject({ statusCode: 429, error: 'Too Many Requests' });
+    expect(blocked.body).toMatchObject({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: 'Too many attempts. Wait a minute and try again.',
+    });
     expect(Object.keys(blocked.headers).some((h) => h.startsWith('retry-after'))).toBe(true);
   });
 });

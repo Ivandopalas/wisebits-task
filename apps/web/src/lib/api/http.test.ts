@@ -53,6 +53,18 @@ describe('api', () => {
     expect(error.fieldErrors).toEqual({ username: 'Already taken' });
   });
 
+  it('explains errors that come from the proxy rather than the API', async () => {
+    const html = (status: number) => new Response('<html>nginx</html>', { status });
+    const message = (status: number) =>
+      api('/things', { fetch: vi.fn(async () => html(status)) }).catch(
+        (e: ApiRequestError) => e.message,
+      );
+    await expect(message(429)).resolves.toBe('Too many attempts. Wait a minute and try again.');
+    await expect(message(502)).resolves.toBe(
+      'The server is not available right now. Try again in a moment.',
+    );
+  });
+
   it('turns a network failure into a readable error', async () => {
     const fetch = vi.fn(async () => {
       throw new TypeError('Failed to fetch');
