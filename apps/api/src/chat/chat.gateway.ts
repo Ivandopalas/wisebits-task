@@ -80,8 +80,10 @@ export class ChatGateway
     });
   }
 
+  // Every log line carries the instance id, so these show which replica holds whom.
   async handleConnection(socket: ChatSocket) {
     const { userId } = socket.data;
+    this.logger.log({ userId, socketId: socket.id }, 'Socket connected');
     await socket.join(userRoom(userId));
     await this.broadcastPresence(userId, true);
   }
@@ -89,8 +91,12 @@ export class ChatGateway
   handleDisconnect(socket: ChatSocket) {
     this.limiter.forget(socket.id);
     const { userId } = socket.data;
+    if (!userId) {
+      return;
+    }
+    this.logger.log({ userId, socketId: socket.id }, 'Socket disconnected');
     // Shutting down closes every socket here; their users are already reconnecting elsewhere.
-    if (!userId || this.closing) {
+    if (this.closing) {
       return;
     }
     const timer = setTimeout(() => {
