@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @chat/shared build && pnpm --parallel --filter @chat/shared --filter @chat/api --filter @chat/web dev",
     "build": "pnpm -r build",
-    "lint": "eslint . && prettier --check .",
+    "lint": "pnpm --filter @chat/web exec svelte-kit sync && eslint . --max-warnings 0 && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "pnpm --filter @chat/shared build && pnpm -r typecheck",
     "test": "pnpm --filter @chat/shared build && pnpm -r test",
