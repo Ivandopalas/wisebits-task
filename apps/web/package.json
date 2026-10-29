@@ -7,7 +7,6 @@
     "build"
   ],
   "imports": {
-    "#lib": "./src/lib/index.ts",
     "#lib/*": "./src/lib/*"
   },
   "scripts": {

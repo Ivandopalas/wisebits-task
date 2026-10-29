@@ -17,6 +17,10 @@ COPY apps/api apps/api
 RUN pnpm --filter @chat/shared build \
   && pnpm --filter @chat/api build \
   && pnpm --filter @chat/api deploy --prod --legacy /out
+# @nestjs/swagger lists TypeScript as an optional peer for its compiler plugin, so pnpm links
+# the workspace's copy into the deployment. Nothing loads it at runtime: 24 MB less.
+RUN rm -rf /out/node_modules/.pnpm/typescript@* \
+  && find /out/node_modules -name typescript -type l -delete
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production

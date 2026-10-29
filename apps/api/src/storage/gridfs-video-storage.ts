@@ -53,14 +53,16 @@ export class GridFsVideoStorage extends VideoStorage implements OnModuleInit {
     );
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.bucket.delete(new Types.ObjectId(id));
+      return true;
     } catch (error) {
       // Another instance (or an earlier run) already removed it.
-      if (!(error instanceof Error && /file not found/i.test(error.message))) {
-        throw error;
+      if (error instanceof Error && /file not found/i.test(error.message)) {
+        return false;
       }
+      throw error;
     }
   }
 
@@ -68,9 +70,12 @@ export class GridFsVideoStorage extends VideoStorage implements OnModuleInit {
     const expired = await this.bucket
       .find({ 'metadata.expiresAt': { $lte: now } }, { projection: { _id: 1 } })
       .toArray();
+    let removed = 0;
     for (const file of expired) {
-      await this.delete(file._id.toString());
+      if (await this.delete(file._id.toString())) {
+        removed += 1;
+      }
     }
-    return expired.length;
+    return removed;
   }
 }

@@ -1,6 +1,7 @@
 import type { StoryDto, StoryFeedItem } from '@chat/shared';
 import { Types } from 'mongoose';
 import request from 'supertest';
+import { VideoStorage } from '../src/storage/video-storage.js';
 import { StoriesCleanupJob } from '../src/stories/stories-cleanup.job.js';
 import { FEED_LIMIT } from '../src/stories/stories.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
@@ -225,8 +226,13 @@ describe('stories', () => {
         { $set: { 'metadata.expiresAt': new Date(later.getTime() + 60_000) } },
       );
 
-      const removed = await job.run(later);
-      expect(removed).toBeGreaterThanOrEqual(1);
+      // Both replicas run the job; each file is removed, and counted, exactly once.
+      const due = await bucketFiles().countDocuments({ 'metadata.expiresAt': { $lte: later } });
+      const [byJob, byOtherReplica] = await Promise.all([
+        job.run(later),
+        t.app.get(VideoStorage).deleteExpired(later),
+      ]);
+      expect(byJob + byOtherReplica).toBe(due);
       expect(await bucketFiles().countDocuments({ _id: new Types.ObjectId(expiredVideo) })).toBe(0);
       expect(
         await t.connection

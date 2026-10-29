@@ -27,8 +27,8 @@ export abstract class VideoStorage {
   abstract save(video: NewVideo): Promise<StoredVideo>;
   abstract stat(id: string): Promise<StoredVideo | null>;
   abstract open(id: string, range?: ByteRange): Readable;
-  /** Idempotent: deleting a missing file is not an error. */
-  abstract delete(id: string): Promise<void>;
-  /** Removes every file past its expiry; returns how many were removed. */
+  /** Idempotent: a missing file is not an error. True when this call removed the file. */
+  abstract delete(id: string): Promise<boolean>;
+  /** Removes every file past its expiry; returns how many this call removed. */
   abstract deleteExpired(now: Date): Promise<number>;
 }
