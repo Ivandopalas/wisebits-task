@@ -304,10 +304,11 @@ apps/
     src/routes/   (guest) sign-in pages, (app) chats, people, stories
     e2e/          Playwright tests
 packages/
-  shared/         zod schemas, DTO types, socket events, limits
+  shared/         zod schemas for requests and responses, socket events, limits
 infra/
   nginx/          reverse proxy configuration
-docker-compose.yml
+docker-compose.yml       the whole stack
+docker-compose.dev.yml   MongoDB port for local development (pnpm db:up)
 ```
 
 ## Toward production
