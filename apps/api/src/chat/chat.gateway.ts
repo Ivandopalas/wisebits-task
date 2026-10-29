@@ -143,7 +143,6 @@ export class ChatGateway
     return { ok: true, data: result };
   }
 
-  /** Typing indicators are ephemeral: relayed to the peer, never stored. */
   @SubscribeMessage('typing')
   async typing(
     @ConnectedSocket() socket: ChatSocket,

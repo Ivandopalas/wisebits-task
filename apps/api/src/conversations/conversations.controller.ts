@@ -36,7 +36,6 @@ export class ConversationsController {
     return this.conversations.list(user.id, query);
   }
 
-  /** Opens the conversation with a user: 201 when it was created, 200 when it already existed. */
   @ApiCreatedResponse({ description: 'Created', standardSchema: conversationDtoSchema })
   @ApiOkResponse({ description: 'Already existed', standardSchema: conversationDtoSchema })
   @Post()

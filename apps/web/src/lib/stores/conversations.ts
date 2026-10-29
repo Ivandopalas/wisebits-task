@@ -22,9 +22,7 @@ export interface ConversationsApi {
 export interface ConversationsStore extends Readable<ConversationsState> {
   load(): Promise<void>;
   loadMore(): Promise<void>;
-  /** Makes sure the conversation is known, fetching it if needed. */
   ensure(id: string): Promise<ConversationDto>;
-  /** Opens (or creates) the conversation with a user. */
   open(userId: string): Promise<ConversationDto>;
   upsert(conversation: ConversationDto): void;
   /** Applies a read receipt; `myId` tells whether it came from me or from the peer. */

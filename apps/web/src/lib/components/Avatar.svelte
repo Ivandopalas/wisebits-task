@@ -5,7 +5,6 @@
     username: string;
     size?: 'sm' | 'md' | 'lg';
     online?: boolean;
-    /** Story ring: 'unseen' highlights, 'seen' is muted. */
     ring?: 'unseen' | 'seen' | null;
   }
 

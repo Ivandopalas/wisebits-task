@@ -58,7 +58,6 @@ export class StoriesController {
     private readonly storage: VideoStorage,
   ) {}
 
-  /** multipart/form-data: `video` (WebM or MP4, up to 25 MB) and `durationMs`. */
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
   @ApiBody({

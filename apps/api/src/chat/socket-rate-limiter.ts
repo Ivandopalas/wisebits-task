@@ -7,7 +7,6 @@ export class SocketRateLimiter {
 
   constructor(private readonly windowMs = 1000) {}
 
-  /** Returns false when the socket has used up `limit` calls of `event` in the current window. */
   take(socketId: string, event: string, limit: number, now = Date.now()): boolean {
     const key = `${socketId}:${event}`;
     const window = this.windows.get(key);

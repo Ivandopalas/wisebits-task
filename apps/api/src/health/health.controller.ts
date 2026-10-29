@@ -19,7 +19,6 @@ export class HealthController {
     return { status: 'ok' };
   }
 
-  /** Ready means useful: the database answers. */
   @Get('ready')
   @HealthCheck()
   ready() {

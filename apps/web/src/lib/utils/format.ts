@@ -36,7 +36,6 @@ export function formatListTime(iso: string, now = new Date()): string {
   return shortDate.format(date);
 }
 
-/** Separator between messages of different days. */
 export function formatDayLabel(iso: string, now = new Date()): string {
   const date = new Date(iso);
   const days = daysBetween(date, now);
@@ -51,7 +50,6 @@ export interface DayGroup<T> {
   items: T[];
 }
 
-/** Splits a chronologically ordered list into runs of the same local calendar day. */
 export function groupByDay<T extends { createdAt: string }>(items: T[]): DayGroup<T>[] {
   const groups: DayGroup<T>[] = [];
   let currentKey = '';

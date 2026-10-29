@@ -51,7 +51,6 @@ export class Conversation {
   @Prop({ type: Map, of: Number, default: {} })
   unread: Record<string, number>;
 
-  /** Highest seq each participant has read. */
   @Prop({ type: Map, of: Number, default: {} })
   lastReadSeq: Record<string, number>;
 

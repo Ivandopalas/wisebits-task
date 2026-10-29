@@ -10,7 +10,6 @@ export class ApiRequestError extends Error {
     return this.error.statusCode;
   }
 
-  /** Field-level messages from a validation error, keyed by field path. */
   get fieldErrors(): Record<string, string> {
     const details = Array.isArray(this.error.details) ? this.error.details : [];
     const result: Record<string, string> = {};
@@ -24,7 +23,6 @@ export class ApiRequestError extends Error {
 }
 
 export interface Session {
-  /** Current access token, or null if there is none. */
   token(): string | null;
   /** Obtains a new access token; resolves null when the session is gone. */
   refresh(): Promise<string | null>;

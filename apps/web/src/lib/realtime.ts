@@ -14,7 +14,6 @@ const myId = () => get(auth).user?.id ?? '';
 export const PRESENCE_RESYNC_MS = 30_000;
 let presenceTimer: ReturnType<typeof setInterval> | undefined;
 
-/** Connects the socket and routes its events into the stores. */
 export function startRealtime(): void {
   const socket = openSocket({
     token: auth.freshToken,

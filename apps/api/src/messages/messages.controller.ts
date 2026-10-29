@@ -53,7 +53,6 @@ export class MessagesController {
     return this.messages.history(id, user.id, query);
   }
 
-  /** Same path as the socket event; a retry with the same clientMessageId returns 200. */
   @ApiCreatedResponse({ description: 'Sent', standardSchema: messageDtoSchema })
   @ApiOkResponse({
     description: 'A retry of a message already sent',
