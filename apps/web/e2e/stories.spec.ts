@@ -55,3 +55,39 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   await author.context.close();
   await viewer.context.close();
 });
+
+test('leaving while the camera is still starting turns it off', async ({ browser }) => {
+  const user = await signedInUser(browser);
+  // A slow start, as when the permission prompt stays open; every stream is kept for inspection.
+  await user.page.addInitScript(() => {
+    const devices = navigator.mediaDevices;
+    const original = devices.getUserMedia.bind(devices);
+    const opened: MediaStream[] = [];
+    Object.assign(window, { openedStreams: opened });
+    devices.getUserMedia = async (constraints) => {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      const stream = await original(constraints);
+      opened.push(stream);
+      return stream;
+    };
+  });
+  await user.page.reload();
+
+  await user.page.getByTestId('new-story').click();
+  await expect(user.page.getByTestId('recorder')).toHaveAttribute('data-phase', 'starting');
+  await user.page.waitForTimeout(400);
+  await user.page.getByRole('link', { name: 'Close' }).click();
+  await expect(user.page).toHaveURL(/\/chats$/);
+
+  const liveTracks = () =>
+    user.page.evaluate(() => {
+      const opened = (window as unknown as { openedStreams: MediaStream[] }).openedStreams;
+      const live = opened.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live');
+      return opened.length === 0 ? null : live.length;
+    });
+  await expect.poll(liveTracks, { timeout: 10_000 }).toBe(0);
+  await user.page.waitForTimeout(500);
+  expect(await liveTracks()).toBe(0);
+
+  await user.context.close();
+});

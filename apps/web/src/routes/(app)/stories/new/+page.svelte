@@ -34,6 +34,8 @@
   let recorder: MediaRecorder | null = null;
   let timers: Array<ReturnType<typeof setTimeout>> = [];
   let ticker: ReturnType<typeof setInterval> | undefined;
+  let disposed = false;
+  let cameraRequest = 0;
 
   const seconds = (ms: number) => `0:${String(Math.floor(ms / 1000)).padStart(2, '0')}`;
 
@@ -44,6 +46,7 @@
   }
 
   async function startCamera() {
+    const request = ++cameraRequest;
     phase = 'starting';
     if (!recordingSupported()) {
       problem = 'unsupported';
@@ -51,9 +54,17 @@
       return;
     }
     try {
-      stream = await openCamera();
+      const opened = await openCamera();
+      // The permission prompt can stay open for a while: by the time the camera starts, the
+      // user may have left the page or asked again. Nobody owns this stream then.
+      if (disposed || request !== cameraRequest) {
+        stopStream(opened);
+        return;
+      }
+      stream = opened;
       phase = 'ready';
     } catch (error) {
+      if (disposed || request !== cameraRequest) return;
       problem = cameraProblem(error);
       phase = 'error';
     }
@@ -151,6 +162,7 @@
   $effect(() => {
     untrack(() => void startCamera());
     return () => {
+      disposed = true;
       clearTimers();
       if (recorder?.state === 'recording') {
         recorder.onstop = null;
