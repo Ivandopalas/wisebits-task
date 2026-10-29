@@ -1,4 +1,10 @@
-import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import {
+  expect,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 export const PASSWORD = 'Password123!';
 
@@ -54,4 +60,33 @@ export async function sendMessage(page: Page, text: string): Promise<void> {
 
 export function messageList(page: Page) {
   return page.getByTestId('message-list');
+}
+
+/** WCAG contrast ratio between an element's text and the background it is drawn on. */
+export function contrastRatio(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    // Computed colors can stay in oklch (Tailwind's palette); a canvas pixel turns them into sRGB.
+    const context = document
+      .createElement('canvas')
+      .getContext('2d', { willReadFrequently: true })!;
+    const luminance = (color: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b] = [...context.getImageData(0, 0, 1, 1).data].map((v) => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    let background = 'rgba(0, 0, 0, 0)';
+    for (let node: Element | null = element; node && background === 'rgba(0, 0, 0, 0)';) {
+      background = getComputedStyle(node).backgroundColor;
+      node = node.parentElement;
+    }
+    const [light, dark] = [luminance(getComputedStyle(element).color), luminance(background)].sort(
+      (a, b) => b - a,
+    );
+    return (light! + 0.05) / (dark! + 0.05);
+  });
 }

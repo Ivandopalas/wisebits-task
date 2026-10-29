@@ -11,6 +11,8 @@
   }
 
   let { message, mine, read, onretry }: Props = $props();
+
+  const failed = $derived(message.status === 'failed');
 </script>
 
 <li
@@ -21,15 +23,19 @@
   <div
     class={[
       'max-w-[85%] rounded-2xl px-3 py-1.5 text-sm shadow-xs sm:max-w-[min(70%,40rem)]',
-      mine ? 'rounded-br-md bg-indigo-600 text-white' : 'rounded-bl-md bg-white text-gray-900',
-      message.status === 'failed' && 'bg-red-50 text-red-900 ring-1 ring-red-200',
+      mine ? 'rounded-br-md' : 'rounded-bl-md',
+      failed
+        ? 'bg-red-50 text-red-900 ring-1 ring-red-200'
+        : mine
+          ? 'bg-indigo-600 text-white'
+          : 'bg-white text-gray-900',
     ]}
   >
     <p class="break-words whitespace-pre-wrap">{message.text}</p>
     <p
       class={[
         'mt-0.5 flex items-center justify-end gap-1 text-[11px]',
-        mine && message.status !== 'failed' ? 'text-indigo-100' : 'text-gray-400',
+        failed ? 'text-red-700' : mine ? 'text-indigo-100' : 'text-gray-500',
       ]}
     >
       <time datetime={message.createdAt}>{formatTime(message.createdAt)}</time>
@@ -63,8 +69,8 @@
         {/if}
       {/if}
     </p>
-    {#if message.status === 'failed'}
-      <p class="mt-1 flex items-center justify-end gap-2 text-xs">
+    {#if failed}
+      <p class="mt-1 flex items-center justify-end gap-2 text-xs" data-testid="message-failed">
         <span>{message.error ?? 'Not delivered'}</span>
         <button type="button" class="font-semibold underline" onclick={onretry}>Retry</button>
       </p>

@@ -1,5 +1,11 @@
 import { expect, test, type WebSocketRoute } from '@playwright/test';
-import { messageList, openConversationWith, sendMessage, signedInUser } from './helpers.js';
+import {
+  contrastRatio,
+  messageList,
+  openConversationWith,
+  sendMessage,
+  signedInUser,
+} from './helpers.js';
 
 test('two people chat in real time, both ways, without reloading', async ({ browser }) => {
   const alice = await signedInUser(browser);
@@ -95,6 +101,13 @@ test('a dropped connection recovers: missed messages arrive, queued ones are del
     .getByTestId('message')
     .filter({ hasText: 'typed while offline' });
   await expect(queued).not.toHaveAttribute('data-status', 'sent');
+
+  // No acknowledgement in time: the bubble says so, stays readable and offers a retry.
+  await expect(queued).toHaveAttribute('data-status', 'failed', { timeout: 15_000 });
+  const retry = queued.getByRole('button', { name: 'Retry' });
+  await expect(retry).toBeVisible();
+  expect(await contrastRatio(queued.getByText('typed while offline'))).toBeGreaterThan(4.5);
+  expect(await contrastRatio(retry)).toBeGreaterThan(4.5);
 
   networkUp = true;
   await alice.context.setOffline(false);
