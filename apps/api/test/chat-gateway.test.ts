@@ -152,6 +152,41 @@ describe('chat gateway', () => {
       expect((await delivered).message.text).toBe('via rest');
     });
 
+    it('stores sends that overlap in time in the order they were sent', async () => {
+      const { alice, conversationId } = await pair();
+      const sent: string[] = [];
+      // The rate limit is per socket, so every burst gets its own connection.
+      for (let burst = 0; burst < 3; burst++) {
+        const socket = await join(alice);
+        const texts = Array.from({ length: 8 }, (_, i) => `burst ${burst} #${i}`);
+        sent.push(...texts);
+        const acks = await Promise.all(texts.map((text) => sendOver(socket, conversationId, text)));
+        expect(acks.every((ack) => ack.ok)).toBe(true);
+      }
+
+      const res = await request(t.url)
+        .get(`/api/conversations/${conversationId}/messages`)
+        .query({ limit: 50 })
+        .set(alice.auth)
+        .expect(200);
+      const stored = (res.body as { items: MessageDto[] }).items;
+      expect(stored.map((m) => m.text)).toEqual(sent);
+      expect(stored.map((m) => m.seq)).toEqual(sent.map((_, i) => i + 1));
+    });
+
+    it('keeps sending after a send in the middle of a burst fails', async () => {
+      const { alice, conversationId } = await pair();
+      const foreign = await pair();
+      const socket = await join(alice);
+      const acks = await Promise.all([
+        sendOver(socket, conversationId, 'first'),
+        sendOver(socket, foreign.conversationId, 'not mine'),
+        sendOver(socket, conversationId, 'second'),
+      ]);
+      expect(acks.map((ack) => ack.ok)).toEqual([true, false, true]);
+      expect(acks[2]).toMatchObject({ ok: true, data: { text: 'second', seq: 2 } });
+    });
+
     it('limits how fast one socket can send', async () => {
       const { alice, conversationId } = await pair();
       const socket = await join(alice);

@@ -60,6 +60,7 @@ export class ChatGateway
   private readonly logger = new Logger(ChatGateway.name);
   private readonly limiter = new SocketRateLimiter();
   private readonly offlineTimers = new Set<NodeJS.Timeout>();
+  private readonly sendQueues = new Map<string, Promise<void>>();
   private closing = false;
 
   constructor(
@@ -121,10 +122,8 @@ export class ChatGateway
     @MessageBody({ schema: wsSendMessageSchema }) payload: WsSendMessagePayload,
   ): Promise<AckResponse<MessageDto>> {
     this.throttle(socket, 'send');
-    const { message } = await this.messages.send(
-      payload.conversationId,
-      socket.data.userId,
-      payload,
+    const { message } = await this.inArrivalOrder(socket.id, () =>
+      this.messages.send(payload.conversationId, socket.data.userId, payload),
     );
     return { ok: true, data: message };
   }
@@ -199,6 +198,26 @@ export class ChatGateway
   private async broadcastPresence(userId: string, online: boolean) {
     const partners = await this.conversations.partnerIds(userId);
     this.realtime.emitToUsers(partners, 'presence', { userId, online });
+  }
+
+  /**
+   * A socket delivers events in order, but concurrent transactions would take `seq` in whatever
+   * order they commit. Running one socket's sends one by one keeps the sender's order.
+   */
+  private inArrivalOrder<T>(socketId: string, task: () => Promise<T>): Promise<T> {
+    const run = (this.sendQueues.get(socketId) ?? Promise.resolve()).then(task);
+    // A failed send must not hold up the ones behind it.
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.sendQueues.set(socketId, tail);
+    void tail.then(() => {
+      if (this.sendQueues.get(socketId) === tail) {
+        this.sendQueues.delete(socketId);
+      }
+    });
+    return run;
   }
 
   private throttle(socket: ChatSocket, event: keyof typeof LIMITS_PER_SECOND) {

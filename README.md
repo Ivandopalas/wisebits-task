@@ -90,9 +90,10 @@ pnpm test
 - **API** (Vitest, supertest, socket.io-client) runs against an in-memory MongoDB replica set,
   so transactions and change streams are real. Covered: registration and login, token rotation
   and reuse detection, users and search (including regex injection), conversation creation
-  under 20 concurrent requests, gapless message sequence under concurrent sends, idempotent
-  retries, access control, read state, socket handshake, acks, delivery to every tab, typing,
-  presence, rate limits, story upload checks, HTTP Range, expiry and file cleanup.
+  under 20 concurrent requests, gapless message sequence under concurrent sends, the sender's
+  order kept in a burst, idempotent retries, access control, read state, socket handshake, acks,
+  delivery to every tab, typing, presence, rate limits, story upload checks, HTTP Range, expiry
+  and file cleanup.
 - **Two instances**: one test file starts two API instances on one database and checks that
   messages, receipts, typing, presence and story announcements cross between them, and that
   presence stays right while a third node is still counted by the others but no longer answers,
@@ -183,7 +184,8 @@ password and an unknown email get the same answer in the same time.
 **Messages.** Storing a message, bumping the conversation's `seq`, updating the preview and the
 unread counters happen in one transaction. `seq` gives a strict order per conversation (object
 ids from two replicas are not ordered within a second), the history cursor, and the catch-up
-query after a reconnect. The client sends a `clientMessageId`; a unique index on
+query after a reconnect. Sends from one socket are processed one by one, so a burst sent without
+waiting for acks keeps its order. The client sends a `clientMessageId`; a unique index on
 `(senderId, clientMessageId)` turns a retry into a no-op that returns the stored message.
 Replying marks the conversation as read for the sender.
 
