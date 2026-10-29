@@ -111,6 +111,51 @@ describe('messages store', () => {
     expect(items().at(-1)).toMatchObject({ status: 'sent', seq: 3 });
   });
 
+  it('re-sends a long queue in order without tripping the rate limit for good', async () => {
+    vi.useFakeTimers();
+    try {
+      const { store, items, sent, replyWith } = setup();
+      await store.loadLatest(CONVERSATION);
+      replyWith(async () => {
+        throw new Error('offline');
+      });
+      for (let i = 1; i <= 14; i += 1) {
+        await store.send(CONVERSATION, `queued ${i}`);
+      }
+      sent.length = 0;
+
+      // The gateway's limit: 10 sends per second per socket.
+      let windowStart = Date.now();
+      let inWindow = 0;
+      let seq = 2;
+      replyWith(async (p) => {
+        if (Date.now() - windowStart >= 1000) {
+          windowStart = Date.now();
+          inWindow = 0;
+        }
+        inWindow += 1;
+        if (inWindow > 10) {
+          return {
+            ok: false,
+            error: { statusCode: 429, error: 'Too Many Requests', message: 'slow down' },
+          };
+        }
+        seq += 1;
+        return { ok: true, data: message(seq, { ...p, senderId: ME }) };
+      });
+
+      const retrying = store.retryFailed();
+      await vi.advanceTimersByTimeAsync(5000);
+      await retrying;
+
+      expect(items().filter((m) => m.status !== 'sent')).toEqual([]);
+      const delivered = [...new Set(sent.map((p) => p.text))];
+      expect(delivered).toEqual(Array.from({ length: 14 }, (_, i) => `queued ${i + 1}`));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not auto-retry a message the server rejected as invalid', async () => {
     const { store, items, sent, replyWith } = setup();
     await store.loadLatest(CONVERSATION);

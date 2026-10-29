@@ -60,6 +60,9 @@ export interface MessagesStore extends Readable<MessagesState> {
 }
 
 const PAGE_SIZE = 30;
+/** The gateway accepts 10 sends a second per socket; a queue waits for the next window. */
+const RATE_LIMIT_PAUSE_MS = 1000;
+const RATE_LIMIT_RETRIES = 5;
 
 function confirmed(message: MessageDto): ChatMessage {
   return { ...message, key: message.clientMessageId, status: 'sent' };
@@ -95,6 +98,7 @@ export function createMessagesStore(
   currentUserId: () => string | null,
 ): MessagesStore {
   const state = writable<MessagesState>({});
+  let retrying: Promise<void> | null = null;
 
   function patch(conversationId: string, change: (thread: Thread) => Partial<Thread>) {
     state.update((s) => {
@@ -109,7 +113,8 @@ export function createMessagesStore(
     }));
   }
 
-  async function deliver(message: ChatMessage) {
+  /** Resolves with the status code of a rejection, or null once the message is in. */
+  async function deliver(message: ChatMessage): Promise<number | null> {
     patchMessage(message.conversationId, message.key, { status: 'sending', error: undefined });
     try {
       const ack = await transport.send({
@@ -119,20 +124,22 @@ export function createMessagesStore(
       });
       if (ack.ok) {
         patch(message.conversationId, (t) => ({ items: mergeMessages(t.items, [ack.data]) }));
-      } else {
-        const transient = ack.error.statusCode === 429 || ack.error.statusCode >= 500;
-        patchMessage(message.conversationId, message.key, {
-          status: 'failed',
-          error: ack.error.message,
-          retryable: transient,
-        });
+        return null;
       }
+      const transient = ack.error.statusCode === 429 || ack.error.statusCode >= 500;
+      patchMessage(message.conversationId, message.key, {
+        status: 'failed',
+        error: ack.error.message,
+        retryable: transient,
+      });
+      return ack.error.statusCode;
     } catch {
       patchMessage(message.conversationId, message.key, {
         status: 'failed',
         error: 'Not delivered',
         retryable: true,
       });
+      return 0;
     }
   }
 
@@ -234,11 +241,25 @@ export function createMessagesStore(
       }
     },
 
-    async retryFailed() {
-      const failed = Object.values(get(state))
-        .flatMap((t) => t.items)
-        .filter((m) => m.status === 'failed' && m.retryable);
-      await Promise.all(failed.map(deliver));
+    retryFailed() {
+      // One pass at a time: a reconnect in the middle of one must not start a second.
+      retrying ??= (async () => {
+        const failed = Object.values(get(state))
+          .flatMap((t) => t.items)
+          .filter((m) => m.status === 'failed' && m.retryable)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        // One message at a time, in the order they were typed: a long queue sent all at once
+        // would run into the rate limit and fail again.
+        for (const message of failed) {
+          for (let attempt = 1; (await deliver(message)) === 429; attempt += 1) {
+            if (attempt === RATE_LIMIT_RETRIES) break;
+            await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_PAUSE_MS));
+          }
+        }
+      })().finally(() => {
+        retrying = null;
+      });
+      return retrying;
     },
 
     loadedConversationIds: () =>
