@@ -100,10 +100,14 @@ pnpm test
 - **Web** (Vitest): the stores (optimistic sending, retries, ordering, catch-up, unread and read
   state, auth refresh deduplication) and utilities.
 - **End to end** (Playwright, Chromium and Firefox with fake cameras) against the Compose stack:
-  sign-up and route guards, two browsers chatting live, typing and read receipts, a second tab,
-  recovery from a dropped connection, history paging, and a story recorded until it stops itself
-  at 15 seconds and shows up for another user. Every main screen is also checked at widths from
-  320 to 1920 px for horizontal scrolling and for controls staying in view.
+  sign-up and route guards, sign-in forms submitted before the scripts load, two browsers chatting
+  live, a typing indicator that lasts through slow typing, read receipts, a second tab, recovery
+  from a dropped connection (including a readable undelivered message with Retry), a conversation
+  surviving reloads and reconnects, history paging, broken links, the loading and server-down
+  screens, no Content-Security-Policy violations, a story recorded until it stops itself at 15
+  seconds, shown to another user and deleted after confirmation, and the camera turned off when
+  the recorder is left while starting. Every main screen is also checked at widths from 320 to
+  1920 px for horizontal scrolling and for controls staying in view.
 
 ```bash
 docker compose up -d --build --wait
@@ -112,7 +116,8 @@ pnpm test:e2e
 ```
 
 The end-to-end suite registers fresh users on every run and goes through the sign-in rate limit
-(30 per minute per address), so running it many times in a row will hit 429 responses.
+(30 per minute per address, burst of 20), so running it more than about three times in a row
+will hit 429 responses.
 
 ## Architecture
 
