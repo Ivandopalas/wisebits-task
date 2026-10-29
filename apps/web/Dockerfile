@@ -24,6 +24,7 @@ WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 USER node
 EXPOSE 3000
+# BusyBox wget ships with Alpine; probing through node would start a whole runtime every 10 s.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1
 CMD ["node", "build"]
