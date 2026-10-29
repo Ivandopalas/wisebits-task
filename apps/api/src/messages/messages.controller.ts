@@ -9,21 +9,32 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiDefaultResponse,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  apiErrorSchema,
   listMessagesQuerySchema,
   markReadSchema,
+  messageDtoSchema,
+  messagesPageSchema,
   objectIdSchema,
   sendMessageSchema,
   type ListMessagesQuery,
   type SendMessageInput,
 } from '@chat/shared';
 import type { Response } from 'express';
+import { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator.js';
 import { MessagesService } from './messages.service.js';
 
 @ApiTags('messages')
 @ApiBearerAuth()
+@ApiDefaultResponse({ description: 'Error', standardSchema: apiErrorSchema })
 @Controller('conversations/:id')
 export class MessagesController {
   constructor(private readonly messages: MessagesService) {}
@@ -32,6 +43,7 @@ export class MessagesController {
    * History, ascending by seq. Without parameters: the latest page. `before=<seq>` pages back
    * through history, `after=<seq>` catches up after a reconnect.
    */
+  @ApiOkResponse({ standardSchema: messagesPageSchema })
   @Get('messages')
   history(
     @Param('id', { schema: objectIdSchema }) id: string,
@@ -42,6 +54,11 @@ export class MessagesController {
   }
 
   /** Same path as the socket event; a retry with the same clientMessageId returns 200. */
+  @ApiCreatedResponse({ description: 'Sent', standardSchema: messageDtoSchema })
+  @ApiOkResponse({
+    description: 'A retry of a message already sent',
+    standardSchema: messageDtoSchema,
+  })
   @Post('messages')
   async send(
     @Param('id', { schema: objectIdSchema }) id: string,
@@ -54,6 +71,7 @@ export class MessagesController {
     return message;
   }
 
+  @ApiOkResponse({ standardSchema: z.object({ seq: z.number().int() }) })
   @Post('read')
   @HttpCode(HttpStatus.OK)
   markRead(

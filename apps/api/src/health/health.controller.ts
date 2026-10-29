@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { HealthCheck, HealthCheckService, MongooseHealthIndicator } from '@nestjs/terminus';
+import { z } from 'zod';
 import { Public } from '../auth/public.decorator.js';
 
 @ApiTags('health')
@@ -12,13 +13,13 @@ export class HealthController {
     private readonly mongo: MongooseHealthIndicator,
   ) {}
 
-  /** The process is up and serving requests. */
+  @ApiOkResponse({ standardSchema: z.object({ status: z.literal('ok') }) })
   @Get('live')
   live() {
     return { status: 'ok' };
   }
 
-  /** The instance can do useful work: the database answers. */
+  /** Ready means useful: the database answers. */
   @Get('ready')
   @HealthCheck()
   ready() {

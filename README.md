@@ -163,7 +163,8 @@ sequenceDiagram
 **Shared contract.** `packages/shared` holds zod schemas, DTO types, socket event maps and
 limits. The API validates request bodies and socket payloads with these schemas through Nest's
 Standard Schema pipe, the web forms validate with the same ones, and Swagger is generated from
-them. A field rule lives in one place.
+them. Responses are zod schemas as well: the DTO types are inferred from them, and Swagger
+documents every response body and the error format with them. A field rule lives in one place.
 
 **Sessions.** Access tokens are short JWTs (15 minutes) kept in memory, never in storage. The
 refresh token is an httpOnly, `SameSite=Strict` cookie scoped to `/api/auth`; only its SHA-256

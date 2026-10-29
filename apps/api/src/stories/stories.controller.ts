@@ -15,17 +15,42 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { createStorySchema, LIMITS, objectIdSchema, storyVideoQuerySchema } from '@chat/shared';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiCreatedResponse,
+  ApiDefaultResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiPartialContentResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  apiErrorSchema,
+  createStorySchema,
+  LIMITS,
+  objectIdSchema,
+  STORY_MIME_TYPES,
+  storyDtoSchema,
+  storyFeedItemSchema,
+  storyVideoQuerySchema,
+} from '@chat/shared';
 import type { Response } from 'express';
 import { pipeline } from 'node:stream/promises';
+import { z } from 'zod';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator.js';
 import { Public } from '../auth/public.decorator.js';
 import { VideoStorage } from '../storage/video-storage.js';
 import { parseRange, UNSATISFIABLE } from './range.js';
 import { StoriesService } from './stories.service.js';
 
+const VIDEO_CONTENT = Object.fromEntries(
+  STORY_MIME_TYPES.map((type) => [type, { schema: { type: 'string', format: 'binary' } }]),
+);
+
 @ApiTags('stories')
+@ApiDefaultResponse({ description: 'Error', standardSchema: apiErrorSchema })
 @Controller('stories')
 export class StoriesController {
   constructor(
@@ -46,6 +71,7 @@ export class StoriesController {
       },
     },
   })
+  @ApiCreatedResponse({ standardSchema: storyDtoSchema })
   @Post()
   @UseInterceptors(
     // Multer's default memory storage: the signature is checked before anything is stored,
@@ -61,12 +87,14 @@ export class StoriesController {
   }
 
   @ApiBearerAuth()
+  @ApiOkResponse({ standardSchema: z.array(storyFeedItemSchema) })
   @Get('feed')
   feed(@CurrentUser() user: AuthUser) {
     return this.stories.feed(user.id);
   }
 
   @ApiBearerAuth()
+  @ApiNoContentResponse()
   @Post(':id/view')
   @HttpCode(HttpStatus.NO_CONTENT)
   view(@Param('id', { schema: objectIdSchema }) id: string, @CurrentUser() user: AuthUser) {
@@ -74,6 +102,7 @@ export class StoriesController {
   }
 
   @ApiBearerAuth()
+  @ApiNoContentResponse()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', { schema: objectIdSchema }) id: string, @CurrentUser() user: AuthUser) {
@@ -85,6 +114,8 @@ export class StoriesController {
    * play and seek. Authorized by the signed token from the feed, since <video> sends no headers.
    */
   @Public()
+  @ApiOkResponse({ description: 'The whole file', content: VIDEO_CONTENT })
+  @ApiPartialContentResponse({ description: 'The requested byte range', content: VIDEO_CONTENT })
   @Get(':id/video')
   async video(
     @Param('id', { schema: objectIdSchema }) id: string,

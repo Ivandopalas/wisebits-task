@@ -1,9 +1,18 @@
 import { Body, Controller, Get, HttpStatus, Param, Post, Query, Res } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiDefaultResponse,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  apiErrorSchema,
+  conversationDtoSchema,
   createConversationSchema,
   listConversationsQuerySchema,
   objectIdSchema,
+  pageSchema,
   type CreateConversationInput,
   type ListConversationsQuery,
 } from '@chat/shared';
@@ -13,10 +22,12 @@ import { ConversationsService } from './conversations.service.js';
 
 @ApiTags('conversations')
 @ApiBearerAuth()
+@ApiDefaultResponse({ description: 'Error', standardSchema: apiErrorSchema })
 @Controller('conversations')
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
+  @ApiOkResponse({ standardSchema: pageSchema(conversationDtoSchema) })
   @Get()
   list(
     @Query({ schema: listConversationsQuerySchema }) query: ListConversationsQuery,
@@ -26,6 +37,8 @@ export class ConversationsController {
   }
 
   /** Opens the conversation with a user: 201 when it was created, 200 when it already existed. */
+  @ApiCreatedResponse({ description: 'Created', standardSchema: conversationDtoSchema })
+  @ApiOkResponse({ description: 'Already existed', standardSchema: conversationDtoSchema })
   @Post()
   async open(
     @Body({ schema: createConversationSchema }) body: CreateConversationInput,
@@ -37,6 +50,7 @@ export class ConversationsController {
     return conversation;
   }
 
+  @ApiOkResponse({ standardSchema: conversationDtoSchema })
   @Get(':id')
   get(@Param('id', { schema: objectIdSchema }) id: string, @CurrentUser() user: AuthUser) {
     return this.conversations.getForUser(id, user.id);

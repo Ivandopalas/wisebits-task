@@ -10,9 +10,25 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiCookieAuth,
+  ApiCreatedResponse,
+  ApiDefaultResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
-import { loginSchema, registerSchema, type LoginInput, type RegisterInput } from '@chat/shared';
+import {
+  apiErrorSchema,
+  authResponseSchema,
+  loginSchema,
+  meDtoSchema,
+  registerSchema,
+  type LoginInput,
+  type RegisterInput,
+} from '@chat/shared';
 import type { Request, Response } from 'express';
 import { AppConfig } from '../config/config.service.js';
 import { clearAuthCookies, REFRESH_COOKIE, setAuthCookies } from './auth.cookies.js';
@@ -21,6 +37,7 @@ import { CurrentUser, type AuthUser } from './current-user.decorator.js';
 import { Public } from './public.decorator.js';
 
 @ApiTags('auth')
+@ApiDefaultResponse({ description: 'Error', standardSchema: apiErrorSchema })
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -30,6 +47,7 @@ export class AuthController {
 
   @Public()
   @UseGuards(ThrottlerGuard)
+  @ApiCreatedResponse({ standardSchema: authResponseSchema })
   @Post('register')
   async register(
     @Body({ schema: registerSchema }) body: RegisterInput,
@@ -40,6 +58,7 @@ export class AuthController {
 
   @Public()
   @UseGuards(ThrottlerGuard)
+  @ApiOkResponse({ standardSchema: authResponseSchema })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -51,6 +70,7 @@ export class AuthController {
 
   @Public()
   @ApiCookieAuth(REFRESH_COOKIE)
+  @ApiOkResponse({ standardSchema: authResponseSchema })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -68,6 +88,7 @@ export class AuthController {
 
   @Public()
   @ApiCookieAuth(REFRESH_COOKIE)
+  @ApiNoContentResponse()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -79,6 +100,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @ApiOkResponse({ standardSchema: meDtoSchema })
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user.id);
