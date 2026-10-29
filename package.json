@@ -15,7 +15,8 @@
     "test": "pnpm --filter @chat/shared build && pnpm -r test",
     "test:e2e": "pnpm --filter @chat/web test:e2e",
     "seed": "pnpm --filter @chat/api seed",
-    "db:up": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait mongo"
+    "db:up": "docker compose -p realtime-chat-dev -f docker-compose.yml -f docker-compose.dev.yml up -d --wait mongo",
+    "db:down": "docker compose -p realtime-chat-dev down"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
