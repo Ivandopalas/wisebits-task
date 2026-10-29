@@ -2,6 +2,7 @@ import type { StoryDto, StoryFeedItem } from '@chat/shared';
 import { Types } from 'mongoose';
 import request from 'supertest';
 import { StoriesCleanupJob } from '../src/stories/stories-cleanup.job.js';
+import { FEED_LIMIT } from '../src/stories/stories.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import { connect, disconnectAll, nextEvent } from './helpers/sockets.js';
 import { registerUser, type TestUser } from './helpers/users.js';
@@ -122,6 +123,30 @@ describe('stories', () => {
       const second = (await upload(author, fakeMp4()).expect(201)).body as StoryDto;
       const item = (await feed(me)).find((i) => i.author.id === author.user.id)!;
       expect(item.stories.map((s) => s.id)).toEqual([first.id, second.id]);
+    });
+
+    it('keeps the newest stories when there are more than the feed takes', async () => {
+      const [me, busy, fresh] = await Promise.all([
+        registerUser(t.url),
+        registerUser(t.url),
+        registerUser(t.url),
+      ]);
+      const hourAgo = Date.now() - 3_600_000;
+      await t.connection.collection('stories').insertMany(
+        Array.from({ length: FEED_LIMIT }, (_, i) => ({
+          authorId: new Types.ObjectId(busy.user.id),
+          videoId: new Types.ObjectId().toString(),
+          mimeType: 'video/webm',
+          durationMs: 5000,
+          sizeBytes: 1000,
+          createdAt: new Date(hourAgo + i),
+          expiresAt: new Date(hourAgo + i + 86_400_000),
+        })),
+      );
+      const latest = (await upload(fresh, fakeWebm()).expect(201)).body as StoryDto;
+
+      const items = await feed(me);
+      expect(items.find((i) => i.author.id === fresh.user.id)?.stories[0]?.id).toBe(latest.id);
     });
   });
 

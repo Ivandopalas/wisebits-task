@@ -22,7 +22,8 @@ import { toUserDto } from '../users/user.mapper.js';
 import { UsersService } from '../users/users.service.js';
 import { Story, StoryView } from './story.schema.js';
 
-const FEED_LIMIT = 500;
+/** Live stories considered for the feed, newest first. */
+export const FEED_LIMIT = 500;
 
 @Injectable()
 export class StoriesService {
@@ -83,15 +84,17 @@ export class StoriesService {
   /** Authors with live stories: mine first, then those with something unseen, newest first. */
   async feed(viewerId: string): Promise<StoryFeedItem[]> {
     const now = new Date();
-    const stories = await this.stories
+    const newest = await this.stories
       .find({ expiresAt: { $gt: now } })
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .limit(FEED_LIMIT)
       .lean()
       .exec();
-    if (stories.length === 0) {
+    if (newest.length === 0) {
       return [];
     }
+    // Each author's stories play oldest first.
+    const stories = newest.reverse();
 
     const [authors, viewed] = await Promise.all([
       this.users.findByIds([...new Set(stories.map((s) => s.authorId.toString()))]),

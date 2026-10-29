@@ -18,6 +18,8 @@ export interface StoriesApi {
 
 export interface StoriesStore extends Readable<StoriesState> {
   load(): Promise<void>;
+  /** A reload a little later, merged with any others asked for in the meantime. */
+  reloadSoon(): void;
   markViewed(storyId: string): void;
   /** Drops a story locally (deleted by its author, here or elsewhere). */
   remove(storyId: string): void;
@@ -26,6 +28,10 @@ export interface StoriesStore extends Readable<StoriesState> {
 }
 
 const initial = (): StoriesState => ({ feed: [], status: 'idle', error: null, loadedAt: 0 });
+
+// A new story is announced to everyone online at once. Reloading at a random moment within
+// this window spreads their feed requests instead of having them all arrive together.
+export const RELOAD_SPREAD_MS = 2000;
 
 function withoutStory(feed: StoryFeedItem[], storyId: string): StoryFeedItem[] {
   return feed
@@ -36,8 +42,9 @@ function withoutStory(feed: StoryFeedItem[], storyId: string): StoryFeedItem[] {
 export function createStoriesStore(client: StoriesApi): StoriesStore {
   const state = writable<StoriesState>(initial());
   let loading: Promise<void> | null = null;
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
 
-  return {
+  const store: StoriesStore = {
     subscribe: state.subscribe,
 
     load() {
@@ -57,6 +64,13 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
         loading = null;
       });
       return loading;
+    },
+
+    reloadSoon() {
+      reloadTimer ??= setTimeout(() => {
+        reloadTimer = undefined;
+        void store.load();
+      }, Math.random() * RELOAD_SPREAD_MS);
     },
 
     markViewed(storyId) {
@@ -82,9 +96,12 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
     },
 
     reset() {
+      clearTimeout(reloadTimer);
+      reloadTimer = undefined;
       state.set(initial());
     },
   };
+  return store;
 }
 
 export const stories = createStoriesStore({
