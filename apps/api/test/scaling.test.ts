@@ -1,6 +1,9 @@
 import type { AckResponse, ConversationDto, MessageDto } from '@chat/shared';
+import { createAdapter, type MongoAdapter } from '@socket.io/mongo-adapter';
 import { randomUUID } from 'node:crypto';
+import { Server } from 'socket.io';
 import request from 'supertest';
+import { ADAPTER_COLLECTION } from '../src/realtime/mongo-io.adapter.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import { connect, disconnectAll, nextEvent } from './helpers/sockets.js';
 import { registerUser } from './helpers/users.js';
@@ -106,5 +109,54 @@ describe('two API instances', () => {
       .set('Cookie', user.cookies)
       .expect(200);
     expect(refreshed.body.user.id).toBe(user.user.id);
+  });
+
+  // Runs last: the instances keep counting the silent node for the rest of the file.
+  it('keeps presence right while an instance has stopped answering', async () => {
+    const { alice, bob, conversationId, aliceSocket, bobSocket } = await setup();
+    await expect
+      .poll(async () => {
+        const res = await aliceSocket.emitWithAck('presence:query', { userIds: [bob.user.id] });
+        return res.ok ? res.data[bob.user.id] : undefined;
+      })
+      .toBe(true);
+
+    // A node that the others see through its heartbeats but that answers nothing: what an
+    // instance looks like to the rest of the cluster in the seconds after it crashes.
+    const silent = new Server();
+    silent.adapter(
+      createAdapter(one.connection.db!.collection(ADAPTER_COLLECTION) as never, {
+        heartbeatInterval: 1000,
+      }),
+    );
+    const silentAdapter = silent.of('/').adapter as MongoAdapter;
+    silentAdapter.onEvent = async () => undefined;
+    // Give the others a heartbeat to learn about it.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    try {
+      const startedAt = Date.now();
+      const res = await aliceSocket.emitWithAck('presence:query', {
+        userIds: [alice.user.id, bob.user.id],
+      });
+      expect(res).toEqual({ ok: true, data: { [alice.user.id]: true, [bob.user.id]: true } });
+      expect(Date.now() - startedAt).toBeLessThan(4000);
+
+      // Bob leaves; the instance he was on still works out that he is offline and says so.
+      const offline = nextEvent(aliceSocket, 'presence', 10_000, (e) => e.userId === bob.user.id);
+      bobSocket.disconnect();
+      expect(await offline).toEqual({ userId: bob.user.id, online: false });
+
+      // Messages never depended on the silent node.
+      const delivered = nextEvent(aliceSocket, 'message:new', 5000);
+      await request(two.url)
+        .post(`/api/conversations/${conversationId}/messages`)
+        .set(bob.auth)
+        .send({ text: 'still here', clientMessageId: randomUUID() })
+        .expect(201);
+      expect((await delivered).message.text).toBe('still here');
+    } finally {
+      await silentAdapter.close();
+    }
   });
 });

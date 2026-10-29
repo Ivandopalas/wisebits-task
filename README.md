@@ -91,7 +91,9 @@ pnpm test
   retries, access control, read state, socket handshake, acks, delivery to every tab, typing,
   presence, rate limits, story upload checks, HTTP Range, expiry and file cleanup.
 - **Two instances**: one test file starts two API instances on one database and checks that
-  messages, receipts, typing, presence and story announcements cross between them.
+  messages, receipts, typing, presence and story announcements cross between them, and that
+  presence stays right while a third node is still counted by the others but no longer answers,
+  as a crashed instance is in its first seconds.
 - **Web** (Vitest): the stores (optimistic sending, retries, ordering, catch-up, unread and read
   state, auth refresh deduplication) and utilities.
 - **End to end** (Playwright, Chromium and Firefox with fake cameras) against the Compose stack:
@@ -182,9 +184,13 @@ that conversation. A conversation without messages is visible only to the user w
 
 **Real time.** Each socket joins `user:<id>`, so one emit reaches all tabs and devices of a
 user. Errors come back through the ack in the same format as REST errors. Presence asks every
-instance which users have sockets (`fetchSockets` through the adapter), which stays correct with
-several tabs and survives a crashed instance; "offline" is announced only if no socket comes back
-within 2 seconds, so a page reload does not flicker. Socket events are rate-limited per socket.
+instance which of the users have sockets there, so several tabs and several instances count
+correctly. An instance that does not answer within 2 seconds counts as having none: after a
+crash the others wait for it until its heartbeats are 5 seconds overdue, and by then its users
+have reconnected elsewhere. "Offline" is announced by the instance the last socket left, and
+only if no socket comes back within 2 seconds, so a page reload does not flicker. A crashed
+instance announces nothing, so clients also re-check their peers every 30 seconds. Socket
+events are rate-limited per socket.
 
 **Scaling.** `@socket.io/mongo-adapter` writes broadcasts into a capped collection and every
 replica reads them with a change stream, which is cursor tailing over the oplog with resume

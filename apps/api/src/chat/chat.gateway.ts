@@ -60,6 +60,7 @@ export class ChatGateway
   private readonly logger = new Logger(ChatGateway.name);
   private readonly limiter = new SocketRateLimiter();
   private readonly offlineTimers = new Set<NodeJS.Timeout>();
+  private closing = false;
 
   constructor(
     private readonly tokens: TokensService,
@@ -88,7 +89,8 @@ export class ChatGateway
   handleDisconnect(socket: ChatSocket) {
     this.limiter.forget(socket.id);
     const { userId } = socket.data;
-    if (!userId) {
+    // Shutting down closes every socket here; their users are already reconnecting elsewhere.
+    if (!userId || this.closing) {
       return;
     }
     const timer = setTimeout(() => {
@@ -102,6 +104,7 @@ export class ChatGateway
   }
 
   onModuleDestroy() {
+    this.closing = true;
     this.offlineTimers.forEach(clearTimeout);
     this.offlineTimers.clear();
   }

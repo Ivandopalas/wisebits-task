@@ -7,6 +7,12 @@ import type { Server, ServerOptions } from 'socket.io';
 export const ADAPTER_COLLECTION = 'socket.io-adapter-events';
 const NAMESPACE_EXISTS = 48;
 
+// The adapter has no "leaving" message: a stopped or crashed instance stays in the others'
+// view until its heartbeats are overdue, and requests wait for its answer until they time out.
+// The defaults (5 s heartbeats, 10 s to give up on a node, 5 s per request) make a rolling
+// restart visible to users; these keep both windows short.
+const CLUSTER_TIMING = { heartbeatInterval: 2000, heartbeatTimeout: 5000, requestsTimeout: 2000 };
+
 /**
  * Socket.io across API replicas through MongoDB. Each instance writes the events it broadcasts
  * into a capped collection and tails it with a change stream (cursor tailing over the oplog),
@@ -30,7 +36,8 @@ export class MongoIoAdapter extends IoAdapter {
         throw error;
       }
     }
-    this.adapter = createAdapter(db.collection(ADAPTER_COLLECTION) as never);
+    // A fresh object: createAdapter writes the node's uid into the options it is given.
+    this.adapter = createAdapter(db.collection(ADAPTER_COLLECTION) as never, { ...CLUSTER_TIMING });
   }
 
   override createIOServer(port: number, options?: ServerOptions): Server {

@@ -9,6 +9,11 @@ import { typing } from './stores/typing.js';
 
 const myId = () => get(auth).user?.id ?? '';
 
+// "Offline" is announced by the instance a user disconnects from. When that instance crashes,
+// nobody is left to announce it, so the online flags are re-checked now and then.
+export const PRESENCE_RESYNC_MS = 30_000;
+let presenceTimer: ReturnType<typeof setInterval> | undefined;
+
 /** Connects the socket and routes its events into the stores. */
 export function startRealtime(): void {
   const socket = openSocket({
@@ -45,9 +50,17 @@ export function startRealtime(): void {
   socket.on('presence', (event) => presence.set(event.userId, event.online));
   socket.on('story:created', () => void stories.load());
   socket.on('story:deleted', (event) => stories.remove(event.storyId));
+
+  clearInterval(presenceTimer);
+  presenceTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      void syncPresence();
+    }
+  }, PRESENCE_RESYNC_MS);
 }
 
 export function stopRealtime(): void {
+  clearInterval(presenceTimer);
   closeSocket();
   conversations.reset();
   messages.reset();
