@@ -13,10 +13,9 @@
   import { conversations } from '#lib/stores/conversations.js';
   import { messages } from '#lib/stores/messages.js';
   import { presence } from '#lib/stores/presence.js';
-  import { typing } from '#lib/stores/typing.js';
+  import { createTypingNotifier, typing } from '#lib/stores/typing.js';
   import { formatDayLabel, groupByDay } from '#lib/utils/format.js';
 
-  const TYPING_IDLE_MS = 3000;
   const NEAR_BOTTOM_PX = 120;
   const NEAR_TOP_PX = 200;
 
@@ -45,8 +44,7 @@
   let anchorKey = $state<string | null>(null);
   let lastKey: string | undefined;
   let visible = $state(document.visibilityState === 'visible');
-  let typingSent = false;
-  let typingTimer: ReturnType<typeof setTimeout> | undefined;
+  const typingNotifier = createTypingNotifier(sendTyping);
 
   // Opening a conversation: make sure we know it, load its latest messages, focus the composer.
   $effect(() => {
@@ -64,7 +62,7 @@
       void messages.loadLatest(conversationId);
       composer?.focus();
     });
-    return () => stopTyping(conversationId);
+    return () => typingNotifier.stop();
   });
 
   // A new last message: follow it if the reader is already at the bottom or sent it. Store
@@ -124,20 +122,7 @@
   }
 
   function onInput() {
-    if (!typingSent && text.trim()) {
-      sendTyping(id, true);
-      typingSent = true;
-    }
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => stopTyping(id), TYPING_IDLE_MS);
-  }
-
-  function stopTyping(conversationId: string) {
-    clearTimeout(typingTimer);
-    if (typingSent) {
-      sendTyping(conversationId, false);
-      typingSent = false;
-    }
+    typingNotifier.input(id, text.trim().length > 0);
   }
 
   function submit(event?: SubmitEvent) {
@@ -145,7 +130,7 @@
     const value = text.trim();
     if (!value || value.length > LIMITS.messageMaxLength) return;
     text = '';
-    stopTyping(id);
+    typingNotifier.stop();
     stickToBottom = true;
     void messages.send(id, value);
     composer?.focus();

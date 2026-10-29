@@ -26,12 +26,26 @@ test('two people chat in real time, both ways, without reloading', async ({ brow
   // Alice sees that Bob has read it.
   await expect(messageList(alice.page).getByTestId('message-read')).toHaveCount(1);
 
-  // Typing indicator, then the reply.
-  await bob.page.getByRole('textbox', { name: 'Message' }).pressSequentially('Yes!', { delay: 50 });
-  await expect(alice.page.getByTestId('chat-status')).toHaveText('typing…');
+  // Typing indicator, then the reply. Bob types for about 9 s, longer than the indicator lives
+  // without a refresh, and Alice must see "typing…" the whole time.
+  const status = alice.page.getByTestId('chat-status');
+  let typed = false;
+  const typing = bob.page
+    .getByRole('textbox', { name: 'Message' })
+    .pressSequentially('Yes! Typing this slowly', { delay: 400 })
+    .then(() => (typed = true));
+  await expect(status).toHaveText('typing…');
+  const samples: string[] = [];
+  while (!typed) {
+    samples.push(await status.innerText());
+    await alice.page.waitForTimeout(250);
+  }
+  await typing;
+  expect(samples.length).toBeGreaterThan(20);
+  expect(samples.filter((s) => s !== 'typing…')).toEqual([]);
   await bob.page.getByRole('textbox', { name: 'Message' }).press('Enter');
-  await expect(messageList(alice.page)).toContainText('Yes!');
-  await expect(alice.page.getByTestId('chat-status')).toHaveText('online');
+  await expect(messageList(alice.page)).toContainText('Yes! Typing this slowly');
+  await expect(status).toHaveText('online');
 
   // Bob's other tab gets his own message too.
   const bobSecondTab = await bob.context.newPage();
