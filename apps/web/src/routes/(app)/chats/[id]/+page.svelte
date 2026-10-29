@@ -79,7 +79,10 @@
     conversations
       .ensure(conversationId)
       .then((c) => syncPresence([c.peer.id]))
-      .catch((error: unknown) => (conversationError = describeProblem(error)));
+      .catch((error: unknown) => {
+        // The reader may have moved on to another conversation meanwhile.
+        if (conversationId === id) conversationError = describeProblem(error);
+      });
   }
 
   // A mistyped or foreign link is not something to retry.
