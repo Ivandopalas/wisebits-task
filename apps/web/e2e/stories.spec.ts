@@ -52,6 +52,21 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   await expect(player).toBeHidden();
   await expect(ring).toHaveAttribute('data-unseen', 'false');
 
+  // The author deletes it, but only after confirming; it disappears for the viewer live.
+  await author.page.getByRole('button', { name: 'View your story' }).click();
+  const ownPlayer = author.page.getByTestId('story-viewer');
+  await ownPlayer.getByRole('button', { name: 'Delete' }).click();
+  const confirm = author.page.getByRole('alertdialog', { name: 'Delete this story?' });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(confirm).toBeHidden();
+  await expect(ownPlayer).toBeVisible();
+
+  await ownPlayer.getByRole('button', { name: 'Delete' }).click();
+  await confirm.getByRole('button', { name: 'Delete' }).click();
+  await expect(ownPlayer).toBeHidden();
+  await expect(ring).toHaveCount(0);
+
   await author.context.close();
   await viewer.context.close();
 });

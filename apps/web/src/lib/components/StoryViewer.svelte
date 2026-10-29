@@ -25,6 +25,7 @@
   let paused = $state(false);
   let muted = $state(false);
   let error = $state<string | null>(null);
+  let confirmingDelete = $state(false);
   let video = $state<HTMLVideoElement>();
 
   const item = $derived(feed[authorIndex]);
@@ -53,6 +54,7 @@
     progress = 0;
     paused = false;
     error = null;
+    confirmingDelete = false;
     authorIndex = nextAuthor;
     storyIndex = nextStory;
   }
@@ -87,6 +89,19 @@
     paused = !paused;
     if (paused) video.pause();
     else void play();
+  }
+
+  // Deleting cannot be undone, and the button sits next to the "next story" tap zone.
+  function askToDelete() {
+    confirmingDelete = true;
+    paused = true;
+    video?.pause();
+  }
+
+  function keepStory() {
+    confirmingDelete = false;
+    paused = false;
+    void play();
   }
 
   async function remove() {
@@ -217,11 +232,35 @@
         </button>
       </div>
 
-      {#if own}
+      {#if own && confirmingDelete}
+        <div
+          class="absolute inset-x-3 bottom-4 flex items-center justify-between gap-3 rounded-xl bg-black/80 px-3 py-2 text-sm text-white"
+          role="alertdialog"
+          aria-label="Delete this story?"
+        >
+          <span>Delete this story?</span>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-white/10"
+              onclick={keepStory}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold hover:bg-red-500"
+              onclick={remove}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      {:else if own}
         <button
           type="button"
           class="absolute right-3 bottom-4 rounded-full bg-black/50 px-3 py-1.5 text-xs font-medium text-white hover:bg-black/70"
-          onclick={remove}
+          onclick={askToDelete}
         >
           Delete
         </button>
