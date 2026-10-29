@@ -9,6 +9,8 @@ export interface ConversationsState {
   error: string | null;
   nextCursor: string | null;
   loadingMore: boolean;
+  /** Pages past the first were loaded: a reload of the first page must keep their cursor. */
+  pagedBeyondFirst: boolean;
 }
 
 export interface ConversationsApi {
@@ -37,6 +39,7 @@ const initial = (): ConversationsState => ({
   error: null,
   nextCursor: null,
   loadingMore: false,
+  pagedBeyondFirst: false,
 });
 
 export function byActivity(a: ConversationDto, b: ConversationDto): number {
@@ -74,10 +77,13 @@ export function createConversationsStore(client: ConversationsApi): Conversation
       state.update((s) => ({ ...s, status: s.items.length ? s.status : 'loading', error: null }));
       try {
         const page = await client.list();
+        // Runs again after every reconnect. The first page only refreshes what it contains:
+        // older pages, and conversations opened directly that the list does not show (an empty
+        // one started by the peer), stay where they are.
         state.update((s) => ({
           ...s,
-          items: merge([], page.items),
-          nextCursor: page.nextCursor,
+          items: merge(s.items, page.items),
+          nextCursor: s.pagedBeyondFirst ? s.nextCursor : page.nextCursor,
           status: 'ready',
         }));
       } catch (error) {
@@ -102,6 +108,7 @@ export function createConversationsStore(client: ConversationsApi): Conversation
           items: merge(s.items, page.items),
           nextCursor: page.nextCursor,
           loadingMore: false,
+          pagedBeyondFirst: true,
         }));
       } catch (error) {
         state.update((s) => ({ ...s, loadingMore: false, error: errorMessage(error) }));

@@ -95,6 +95,38 @@ test('a dropped connection recovers: missed messages arrive, queued ones are del
   await bob.context.close();
 });
 
+test('a conversation the peer opened survives a reload and a reconnect', async ({ browser }) => {
+  const alice = await signedInUser(browser);
+  const bob = await signedInUser(browser);
+  const liveSockets: WebSocketRoute[] = [];
+  await bob.page.routeWebSocket(/\/socket\.io\//, (ws) => {
+    ws.connectToServer();
+    liveSockets.push(ws);
+  });
+
+  // Alice opens it and writes nothing; Bob opens the same conversation from People.
+  await openConversationWith(alice, bob);
+  await openConversationWith(bob, alice);
+
+  await bob.page.reload();
+  await expect(bob.page.getByTestId('chat-peer')).toHaveText(alice.username);
+  await expect(bob.page.getByTestId('chat-status')).toHaveText('online');
+
+  // After a reconnect the app reloads the conversation list; the open one must not drop out.
+  const listReloaded = bob.page.waitForResponse(
+    (r) => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/conversations',
+  );
+  await Promise.all(liveSockets.splice(0).map((ws) => ws.close()));
+  await listReloaded;
+  await expect(bob.page.getByTestId('chat-peer')).toHaveText(alice.username);
+  await expect(
+    bob.page.getByTestId('conversation-item').filter({ hasText: alice.username }),
+  ).toBeVisible();
+
+  await alice.context.close();
+  await bob.context.close();
+});
+
 test('history loads older messages when scrolling up', async ({ browser }) => {
   const alice = await signedInUser(browser);
   const bob = await signedInUser(browser);

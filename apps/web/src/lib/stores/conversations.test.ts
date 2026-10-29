@@ -1,4 +1,4 @@
-import type { ConversationDto } from '@chat/shared';
+import type { ConversationDto, Page } from '@chat/shared';
 import { get } from 'svelte/store';
 import { describe, expect, it, vi } from 'vitest';
 import { createConversationsStore } from './conversations.js';
@@ -23,7 +23,10 @@ function conversation(
 
 function setup(items: ConversationDto[] = []) {
   const client = {
-    list: vi.fn(async () => ({ items, nextCursor: null })),
+    list: vi.fn(async (_cursor?: string): Promise<Page<ConversationDto>> => ({
+      items,
+      nextCursor: null,
+    })),
     get: vi.fn(async (id: string) => conversation(id, 0)),
     open: vi.fn(async (userId: string) => conversation(`new-${userId}`, 59)),
   };
@@ -79,6 +82,49 @@ describe('conversations store', () => {
     await store.ensure('x');
     await store.ensure('x');
     expect(client.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a conversation opened directly when the list loads after it', async () => {
+    // The peer started it and nobody has written yet, so the list does not include it.
+    const { store, client } = setup([conversation('a', 1)]);
+    let finishList!: () => void;
+    client.list.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishList = () => resolve({ items: [conversation('a', 1)], nextCursor: null });
+        }),
+    );
+    const loading = store.load();
+    await store.ensure('empty');
+    finishList();
+    await loading;
+    expect(get(store).items.map((c) => c.id)).toEqual(['a', 'empty']);
+
+    // Every reconnect reloads the list; the open conversation must survive that too.
+    await store.load();
+    expect(get(store).items.map((c) => c.id)).toEqual(['a', 'empty']);
+  });
+
+  it('keeps older pages and their cursor when the first page reloads', async () => {
+    const { store, client } = setup();
+    client.list.mockImplementation(async (cursor?: string) =>
+      cursor === 'page-2'
+        ? { items: [conversation('c', 2), conversation('d', 1)], nextCursor: 'page-3' }
+        : { items: [conversation('a', 4), conversation('b', 3)], nextCursor: 'page-2' },
+    );
+    await store.load();
+    await store.loadMore();
+    await store.load();
+    expect(get(store)).toMatchObject({ nextCursor: 'page-3' });
+    expect(get(store).items.map((c) => c.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('takes fresh unread counts from a reload', async () => {
+    const { store, client } = setup([conversation('a', 1, { unreadCount: 2 })]);
+    await store.load();
+    client.list.mockResolvedValueOnce({ items: [conversation('a', 1)], nextCursor: null });
+    await store.load();
+    expect(get(store).items[0]!.unreadCount).toBe(0);
   });
 
   it('keeps the list when a reload fails', async () => {
