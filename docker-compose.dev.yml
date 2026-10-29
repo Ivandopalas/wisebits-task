@@ -1,0 +1,6 @@
+# Local development (`pnpm dev`): MongoDB from the stack, reachable from the host.
+# Started with `pnpm db:up`, which layers this file over docker-compose.yml.
+services:
+  mongo:
+    ports:
+      - '127.0.0.1:${MONGO_PORT:-27017}:27017'

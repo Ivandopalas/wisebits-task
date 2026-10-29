@@ -61,16 +61,19 @@ Requires Node.js 22.17+, pnpm 10 and Docker (for MongoDB only).
 ```bash
 pnpm install
 cp .env.example .env
-docker compose up -d mongo
+pnpm db:up
 pnpm dev
 ```
 
-The web app runs at <http://localhost:5173>, the API at port 3000. Vite proxies `/api` and
-`/socket.io` to the API, so the browser sees one origin, as it does behind nginx. With
-`pnpm dev` running, `pnpm seed` adds the demo users.
+`pnpm db:up` starts MongoDB from the Compose file with its port published on `127.0.0.1`
+(`docker-compose.dev.yml`; the quick start does not publish it, so a local mongod on 27017 does
+not get in its way). The web app runs at <http://localhost:5173>, the API at port 3000. Vite
+proxies `/api` and `/socket.io` to the API, so the browser sees one origin, as it does behind
+nginx. With `pnpm dev` running, `pnpm seed` adds the demo users.
 
 | Command          | What it does                                                 |
 | ---------------- | ------------------------------------------------------------ |
+| `pnpm db:up`     | MongoDB for local development, port published on 127.0.0.1   |
 | `pnpm dev`       | shared package, API and web in watch mode                    |
 | `pnpm lint`      | ESLint and Prettier check                                    |
 | `pnpm typecheck` | `tsc` for the API and shared package, `svelte-check` for web |
@@ -271,7 +274,7 @@ Docker Compose reads these from `.env` (see `.env.example`):
 | Variable                     | Default    | Meaning                                    |
 | ---------------------------- | ---------- | ------------------------------------------ |
 | `APP_PORT`                   | `8080`     | port nginx listens on                      |
-| `MONGO_PORT`                 | `27017`    | MongoDB port on 127.0.0.1, for development |
+| `MONGO_PORT`                 | `27017`    | MongoDB port on 127.0.0.1 for `pnpm db:up` |
 | `JWT_SECRET`                 | demo value | signing key, 32+ characters                |
 | `COOKIE_SECURE`              | `false`    | `true` whenever served over HTTPS          |
 | `AUTH_RATE_LIMIT_PER_MINUTE` | `30`       | sign-in attempts per address per replica   |

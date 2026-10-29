@@ -44,6 +44,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter @chat/web...
       - run: pnpm --filter @chat/web exec playwright install --with-deps chromium firefox
+      # The quick start must not need any host port but the app's: hold 27017 the way a local
+      # MongoDB would.
+      - name: Occupy the MongoDB port
+        run: nohup python3 -m http.server 27017 --bind 127.0.0.1 > /dev/null 2>&1 &
       - name: Start the stack
         run: docker compose up -d --build --wait
       - run: pnpm test:e2e

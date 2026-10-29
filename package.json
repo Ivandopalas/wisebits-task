@@ -14,7 +14,8 @@
     "typecheck": "pnpm --filter @chat/shared build && pnpm -r typecheck",
     "test": "pnpm --filter @chat/shared build && pnpm -r test",
     "test:e2e": "pnpm --filter @chat/web test:e2e",
-    "seed": "pnpm --filter @chat/api seed"
+    "seed": "pnpm --filter @chat/api seed",
+    "db:up": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait mongo"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
