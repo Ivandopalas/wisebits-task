@@ -9,7 +9,8 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,
-  workers: process.env.CI ? 2 : 3,
+  // A CI runner has 2 vCPUs and 7 GB for the whole stack plus the browsers; Firefox starves first.
+  workers: process.env.CI ? 1 : 3,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
