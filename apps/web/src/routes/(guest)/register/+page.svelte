@@ -2,6 +2,7 @@
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
+  import { onMount } from 'svelte';
   import { LIMITS, registerSchema } from '@chat/shared';
   import { ApiRequestError, errorMessage } from '#lib/api/http.js';
   import TextField from '#lib/components/TextField.svelte';
@@ -15,6 +16,10 @@
   let errors = $state<Record<string, string>>({});
   let formError = $state<string | null>(null);
   let submitting = $state(false);
+  // Until the scripts have loaded, a submit is the browser's own: a full page request carrying
+  // the form fields. The button waits for the app instead.
+  let hydrated = $state(false);
+  onMount(() => (hydrated = true));
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -50,7 +55,7 @@
 
 <h2 class="mb-6 text-lg font-semibold text-gray-900">Create an account</h2>
 
-<form class="flex flex-col gap-4" novalidate onsubmit={submit}>
+<form class="flex flex-col gap-4" method="post" novalidate onsubmit={submit}>
   <TextField
     label="Email"
     name="email"
@@ -84,7 +89,7 @@
   <button
     type="submit"
     class="mt-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
-    disabled={submitting}
+    disabled={!hydrated || submitting}
   >
     {submitting ? 'Creating account…' : 'Create account'}
   </button>

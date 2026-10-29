@@ -58,6 +58,44 @@ test('wrong credentials get one generic answer; right ones sign in', async ({ br
   await expect(page).toHaveURL(/\/chats$/);
 });
 
+test('a form sent before the scripts load never puts the password in the address', async ({
+  browser,
+  page,
+}) => {
+  const user = await signedInUser(browser);
+  await user.context.close();
+
+  // A slow network: the server-rendered form is on screen, the app's scripts are not.
+  let release!: () => void;
+  const scriptsArrive = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/_app/immutable/**/*.js', async (route) => {
+    await scriptsArrive;
+    await route.continue().catch(() => undefined);
+  });
+
+  await page.goto('/register', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('Email').fill('early@example.com');
+  await page.getByLabel('Username').fill('early_bird');
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByLabel('Password').press('Enter');
+  await page.waitForTimeout(500);
+  expect(new URL(page.url()).search).toBe('');
+
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('Email').fill(user.email);
+  await page.getByLabel('Password').fill(PASSWORD);
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled();
+  await page.getByLabel('Password').press('Enter');
+  await page.waitForTimeout(500);
+  expect(page.url()).not.toContain('password');
+
+  // Once the app is running, what was typed early is still there and signs in.
+  release();
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/chats$/);
+});
+
 test('the session survives a reload and ends with sign out', async ({ browser }) => {
   const user = await signedInUser(browser);
   const { page } = user;
