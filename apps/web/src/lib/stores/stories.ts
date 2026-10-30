@@ -65,39 +65,42 @@ function withStory(
 
 export function createStoriesStore(client: StoriesApi): StoriesStore {
   const state = writable<StoriesState>(initial());
-  let loading: Promise<void> | null = null;
+  // A load answers "what is there now", and an older one may have been read before a reconnect.
+  let latestLoad = 0;
   // A loaded feed replaces the current one and may have been read before these happened.
-  let changesDuringLoad: FeedChange[] = [];
+  let changesDuringLoad: FeedChange[] | null = null;
 
   const change = (apply: FeedChange) => {
-    if (loading) {
-      changesDuringLoad.push(apply);
-    }
+    changesDuringLoad?.push(apply);
     state.update((s) => ({ ...s, feed: apply(s.feed) }));
   };
 
   const store: StoriesStore = {
     subscribe: state.subscribe,
 
-    load() {
-      loading ??= (async () => {
-        state.update((s) => ({ ...s, status: s.feed.length ? s.status : 'loading', error: null }));
-        try {
-          const loaded = await client.feed();
-          const feed = changesDuringLoad.reduce((current, apply) => apply(current), loaded);
+    async load() {
+      const load = ++latestLoad;
+      const changes: FeedChange[] = [];
+      changesDuringLoad = changes;
+      state.update((s) => ({ ...s, status: s.feed.length ? s.status : 'loading', error: null }));
+      try {
+        const loaded = await client.feed();
+        if (load === latestLoad) {
+          const feed = changes.reduce((current, apply) => apply(current), loaded);
           state.set({ feed, status: 'ready', error: null });
-        } catch (error) {
+        }
+      } catch (error) {
+        if (load === latestLoad) {
           state.update((s) => ({
             ...s,
             status: s.feed.length ? 'ready' : 'error',
             error: errorMessage(error),
           }));
         }
-      })().finally(() => {
-        loading = null;
-        changesDuringLoad = [];
-      });
-      return loading;
+      }
+      if (load === latestLoad) {
+        changesDuringLoad = null;
+      }
     },
 
     add(event, viewerId) {
@@ -138,6 +141,8 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
     },
 
     reset() {
+      latestLoad += 1;
+      changesDuringLoad = null;
       state.set(initial());
     },
   };

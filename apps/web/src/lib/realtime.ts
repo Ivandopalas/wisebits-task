@@ -23,13 +23,14 @@ export function startRealtime(): void {
     onConnectionLost: () => presence.reset(),
     onConnect: (resumed) => {
       void syncPresence();
+      // Read only now: everything published from here on arrives as an event.
+      void stories.load();
       if (resumed) {
         // Whatever happened while we were away: new conversations, missed messages.
         void conversations.load();
         for (const id of messages.loadedConversationIds()) {
           void messages.catchUp(id).catch(() => undefined);
         }
-        void stories.load();
       }
       void messages.retryFailed();
     },

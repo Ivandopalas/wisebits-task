@@ -138,6 +138,28 @@ describe('stories store', () => {
 
       expect(get(store).feed[0]?.hasUnseen).toBe(false);
     });
+
+    it('takes the latest load, whichever answers last', async () => {
+      const { store, loaded, respond } = setupLoading();
+      const reloaded = store.load();
+
+      await reloaded;
+      respond([feedItem(story('stale', 'bob'))]);
+      await loaded;
+
+      expect(get(store).feed).toEqual([]);
+      expect(get(store).status).toBe('ready');
+    });
+
+    it('drops a feed that arrives after signing out', async () => {
+      const { store, loaded, respond } = setupLoading();
+
+      store.reset();
+      respond([feedItem(story('s1', 'bob'))]);
+      await loaded;
+
+      expect(get(store)).toEqual({ feed: [], status: 'idle', error: null });
+    });
   });
 
   it('stops counting a deleted story as unseen', async () => {

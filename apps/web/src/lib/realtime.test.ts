@@ -25,6 +25,7 @@ const { PRESENCE_RESYNC_MS, sendTyping, startRealtime, stopRealtime } =
   await import('./realtime.js');
 const { conversations } = await import('./stores/conversations.js');
 const { presence } = await import('./stores/presence.js');
+const { stories } = await import('./stores/stories.js');
 const { typing } = await import('./stores/typing.js');
 
 const peer = { id: 'peer-1', username: 'carol', createdAt: '2026-10-29T10:00:00.000Z' };
@@ -78,6 +79,16 @@ describe('realtime', () => {
     await vi.advanceTimersByTimeAsync(PRESENCE_RESYNC_MS);
     expect(socket.request).toHaveBeenCalledWith('presence:query', { userIds: [peer.id] });
     expect(get(presence)[peer.id]).toBe(false);
+  });
+
+  it('reads the story feed on connecting, when anything newer reaches the socket', () => {
+    const load = vi.spyOn(stories, 'load').mockResolvedValue();
+    startRealtime();
+    expect(load).not.toHaveBeenCalled();
+
+    socket.open.mock.lastCall![0].onConnect(false);
+
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it('stops re-checking once signed out', async () => {
