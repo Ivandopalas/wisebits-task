@@ -1,4 +1,10 @@
-import type { AuthResponse, LoginInput, MeDto, RegisterInput } from '@chat/shared';
+import {
+  SESSION_HINT_COOKIE,
+  type AuthResponse,
+  type LoginInput,
+  type MeDto,
+  type RegisterInput,
+} from '@chat/shared';
 import { derived, get, writable, type Readable } from 'svelte/store';
 import { api, parse, useSession } from '../api/http.js';
 
@@ -138,7 +144,9 @@ export const auth: AuthStore = createAuthStore({
   fetch: (...args) => fetch(...args),
   locks: typeof navigator !== 'undefined' ? navigator.locks : undefined,
   channel: typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('chat:auth') : undefined,
-  hasSessionHint: () => typeof document !== 'undefined' && /(?:^|;\s*)sid=/.test(document.cookie),
+  hasSessionHint: () =>
+    typeof document !== 'undefined' &&
+    document.cookie.split('; ').some((c) => c.startsWith(`${SESSION_HINT_COOKIE}=`)),
 });
 
 useSession({ token: auth.token, refresh: auth.refresh });

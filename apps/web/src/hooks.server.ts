@@ -1,3 +1,4 @@
+import { SESSION_HINT_COOKIE } from '@chat/shared';
 import type { Handle } from '@sveltejs/kit/hooks';
 
 // Signed-in pages render in the browser, after the session is restored; until then the page
@@ -10,7 +11,7 @@ const LOADING_SCREEN = `<div id="app-loading" role="status" aria-label="Loading"
  */
 export const handle: Handle = async ({ event, resolve }) => {
   const signedInArea = event.route.id?.startsWith('/(app)') ?? false;
-  if (signedInArea && !event.cookies.get('sid')) {
+  if (signedInArea && !event.cookies.get(SESSION_HINT_COOKIE)) {
     const next = event.url.pathname + event.url.search;
     return new Response(null, {
       status: 303,
