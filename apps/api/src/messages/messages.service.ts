@@ -16,7 +16,7 @@ export interface SendInput {
 
 export interface SendResult {
   message: MessageDto;
-  /** False when the same clientMessageId was already stored: a retry, nothing new happened. */
+  /** False when the same clientMessageId was already stored: a retry, nothing new was written. */
   created: boolean;
 }
 
@@ -193,10 +193,16 @@ export class MessagesService {
       .exec();
   }
 
-  private replay(message: Message, conversationId: string): SendResult {
+  /**
+   * The first attempt may have committed and then lost its broadcast along with its ack, when
+   * its instance stopped in between. The retry is the only trace of that, so it delivers again;
+   * clients drop what they already have by clientMessageId.
+   */
+  private async replay(message: Message, conversationId: string): Promise<SendResult> {
     if (!message.conversationId.equals(conversationId)) {
       throw new ConflictException('This clientMessageId was already used in another conversation');
     }
+    await this.broadcastNewMessage(message);
     return { message: toMessageDto(message), created: false };
   }
 

@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 import request from 'supertest';
 import { ADAPTER_COLLECTION } from '../src/realtime/mongo-io.adapter.js';
+import { RealtimeService } from '../src/realtime/realtime.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
-import { connect, disconnectAll, nextEvent } from './helpers/sockets.js';
+import { connect, disconnectAll, nextEvent, type ClientSocket } from './helpers/sockets.js';
 import { registerUser } from './helpers/users.js';
 import { fakeWebm } from './helpers/videos.js';
 
@@ -61,6 +62,30 @@ describe('two API instances', () => {
     const typing = nextEvent(bobSocket, 'typing', 5000);
     aliceSocket.emit('typing', { conversationId, isTyping: true });
     expect(await typing).toMatchObject({ userId: alice.user.id, isTyping: true });
+  });
+
+  it('delivers a message on the retry when the instance that stored it died before the emit', async () => {
+    const { alice, conversationId, bobSocket } = await setup();
+    const clientMessageId = randomUUID();
+    const send = (socket: ClientSocket) =>
+      socket.emitWithAck('message:send', {
+        conversationId,
+        text: 'ack lost',
+        clientMessageId,
+      }) as Promise<AckResponse<MessageDto>>;
+
+    // Committed, but the instance goes down before anyone hears of it, its ack included.
+    const dying = vi.spyOn(one.app.get(RealtimeService), 'emitToUsers').mockReturnValue(undefined);
+    const firstSocket = await connect(one.url, alice.accessToken);
+    const first = await send(firstSocket);
+    expect(first.ok).toBe(true);
+    dying.mockRestore();
+
+    // The client reconnects to a surviving instance and retries with the same id.
+    const delivered = nextEvent(bobSocket, 'message:new', 5000);
+    const retrySocket = await connect(two.url, alice.accessToken);
+    expect(await send(retrySocket)).toEqual(first);
+    expect((await delivered).message).toEqual(first.ok && first.data);
   });
 
   it('answers presence for users connected to the other instance', async () => {

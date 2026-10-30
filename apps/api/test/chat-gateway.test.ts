@@ -1,4 +1,4 @@
-import type { AckResponse, ConversationDto, MessageDto } from '@chat/shared';
+import type { AckResponse, ConversationDto, MessageDto, MessagesPage } from '@chat/shared';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -102,19 +102,25 @@ describe('chat gateway', () => {
       expect(mirrored.conversation).toMatchObject({ peer: { id: bob.user.id }, unreadCount: 0 });
     });
 
-    it('does not duplicate or re-deliver a retried send', async () => {
+    it('stores a retried send once and delivers the same message again', async () => {
       const { alice, bob, conversationId } = await pair();
       const [aliceSocket, bobSocket] = await Promise.all([join(alice), join(bob)]);
       const clientMessageId = randomUUID();
 
       const delivered = nextEvent(bobSocket, 'message:new');
       const first = await sendOver(aliceSocket, conversationId, 'once', clientMessageId);
-      await delivered;
+      const original = await delivered;
 
-      const nothingMore = noEvent(bobSocket, 'message:new');
+      const redelivered = nextEvent(bobSocket, 'message:new');
       const retry = await sendOver(aliceSocket, conversationId, 'once', clientMessageId);
       expect(retry).toEqual(first);
-      expect(await nothingMore).toBe(true);
+      expect(await redelivered).toEqual(original);
+
+      const res = await request(t.url)
+        .get(`/api/conversations/${conversationId}/messages`)
+        .set(alice.auth)
+        .expect(200);
+      expect((res.body as MessagesPage).items).toHaveLength(1);
     });
 
     it('answers errors through the ack in the REST error format', async () => {
