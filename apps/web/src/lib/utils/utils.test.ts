@@ -41,11 +41,18 @@ describe('date formats', () => {
 describe('safeNext', () => {
   it.each([
     ['/chats/42', '/chats/42'],
-    ['/users?q=a', '/users?q=a'],
+    ['/users?q=a#top', '/users?q=a#top'],
     [null, '/chats'],
     ['https://evil.example', '/chats'],
+    ['javascript:alert(1)', '/chats'],
     ['//evil.example', '/chats'],
     ['/\\evil.example', '/chats'],
+    // Browsers drop tabs and newlines from a URL, which turns these into `//evil.example`.
+    ['/\t/evil.example', '/chats'],
+    ['/\n/evil.example', '/chats'],
+    ['/\r/evil.example', '/chats'],
+    // Stays on the site as it is, but a path with two leading slashes reads as a host.
+    ['/.//evil.example', '/chats'],
   ])('%j -> %j', (input, expected) => {
     expect(safeNext(input)).toBe(expected);
   });
