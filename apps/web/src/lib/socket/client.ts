@@ -24,6 +24,7 @@ export interface SocketOptions {
   onUnauthorized(): void;
   /** Fired on every successful (re)connection; `resumed` is false for the first one. */
   onConnect(resumed: boolean): void;
+  onDisconnect(): void;
 }
 
 /**
@@ -86,6 +87,7 @@ export function openSocket(options: SocketOptions): ChatSocket {
 
   instance.on('disconnect', (reason) => {
     connection.set('offline');
+    options.onDisconnect();
     // The server closing the socket is not retried automatically.
     if (reason === 'io server disconnect') {
       instance.connect();

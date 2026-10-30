@@ -19,6 +19,8 @@ export function startRealtime(): void {
     token: auth.freshToken,
     refresh: auth.refresh,
     onUnauthorized: () => void auth.logout(),
+    // Nobody tells us who came and went while we are away.
+    onDisconnect: () => presence.reset(),
     onConnect: (resumed) => {
       void syncPresence();
       if (resumed) {

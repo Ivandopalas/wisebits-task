@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const socket = vi.hoisted(() => ({
   connected: true,
   on: vi.fn(),
+  open: vi.fn(),
   request: vi.fn(),
 }));
 
@@ -12,7 +13,7 @@ vi.mock('./socket/client.js', async () => {
   const { writable } = await import('svelte/store');
   return {
     connection: writable('idle'),
-    openSocket: () => socket,
+    openSocket: socket.open,
     closeSocket: vi.fn(),
     currentSocket: () => socket,
     request: socket.request,
@@ -38,6 +39,7 @@ describe('realtime presence', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('document', { visibilityState: 'visible' });
+    socket.open.mockReturnValue(socket);
     socket.request.mockResolvedValue({ ok: true, data: { [peer.id]: false } });
   });
 
@@ -64,5 +66,14 @@ describe('realtime presence', () => {
     stopRealtime();
     await vi.advanceTimersByTimeAsync(3 * PRESENCE_RESYNC_MS);
     expect(socket.request).not.toHaveBeenCalled();
+  });
+
+  it('forgets online flags with the connection: they would go stale unnoticed', () => {
+    startRealtime();
+    presence.set(peer.id, true);
+
+    socket.open.mock.lastCall![0].onDisconnect();
+
+    expect(get(presence)).toEqual({});
   });
 });

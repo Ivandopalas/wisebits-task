@@ -2,11 +2,13 @@
   import { resolve } from '$app/paths';
   import { goto } from '$app/navigation';
   import { LIMITS, type Page, type UserDto } from '@chat/shared';
+  import { untrack } from 'svelte';
   import { api, errorMessage } from '#lib/api/http.js';
   import Avatar from '#lib/components/Avatar.svelte';
   import ErrorState from '#lib/components/ErrorState.svelte';
   import Spinner from '#lib/components/Spinner.svelte';
   import { syncPresence } from '#lib/realtime.js';
+  import { connection } from '#lib/socket/client.js';
   import { conversations } from '#lib/stores/conversations.js';
   import { presence } from '#lib/stores/presence.js';
 
@@ -80,6 +82,13 @@
   });
 
   $effect(() => () => controller?.abort());
+
+  // Online flags go with the connection; the people on screen are not all in the conversation list.
+  $effect(() => {
+    if ($connection === 'online') {
+      void syncPresence(untrack(() => users).map((u) => u.id));
+    }
+  });
 </script>
 
 <svelte:head>

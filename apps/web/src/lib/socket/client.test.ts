@@ -62,6 +62,7 @@ function setup() {
     refresh: vi.fn<() => Promise<string | null>>(async () => 'new-token'),
     onUnauthorized: vi.fn(),
     onConnect: vi.fn(),
+    onDisconnect: vi.fn(),
   };
   openSocket(options);
   return { options, socket: sockets.created.at(-1) as FakeSocket };
@@ -141,6 +142,7 @@ describe('chat socket', () => {
 
       expect(socket.connected).toBe(false);
       expect(get(connection)).toBe('offline');
+      expect(options.onDisconnect).toHaveBeenCalledOnce();
     });
 
     it('reports it while a connection attempt is still under way, too', () => {
@@ -203,5 +205,6 @@ describe('chat socket', () => {
     socket.open();
 
     expect(options.onConnect.mock.calls).toEqual([[false], [true]]);
+    expect(options.onDisconnect).toHaveBeenCalledOnce();
   });
 });

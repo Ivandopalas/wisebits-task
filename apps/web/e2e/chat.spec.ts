@@ -85,6 +85,8 @@ test('a lost network shows at once and recovers: missed messages arrive, queued 
   await sendMessage(alice.page, 'before the outage');
   await openConversationWith(bob, alice);
   await expect(messageList(bob.page)).toContainText('before the outage');
+  const status = alice.page.getByTestId('chat-status');
+  await expect(status).toHaveText('online');
 
   holdSends = true;
   await sendMessage(alice.page, 'on its way when the network went');
@@ -97,6 +99,10 @@ test('a lost network shows at once and recovers: missed messages arrive, queued 
   await alice.context.setOffline(true);
   await expect(onItsWay).toHaveAttribute('data-status', 'failed', { timeout: 1000 });
   await expect(alice.page.getByTestId('connection-banner')).toBeVisible({ timeout: 5000 });
+
+  // Alice can say nothing about Bob now: he is not "offline", she is.
+  await expect(status).toHaveText('connecting…');
+  await expect(alice.page.getByTitle('Online')).toHaveCount(0);
 
   await sendMessage(bob.page, 'sent while Alice was offline');
   await sendMessage(alice.page, 'typed while offline');
@@ -114,6 +120,7 @@ test('a lost network shows at once and recovers: missed messages arrive, queued 
   holdSends = false;
   await alice.context.setOffline(false);
   await expect(alice.page.getByTestId('connection-banner')).toBeHidden({ timeout: 20_000 });
+  await expect(status).toHaveText('online');
   await expect(messageList(alice.page)).toContainText('sent while Alice was offline');
   await expect(queued).toHaveAttribute('data-status', 'sent', { timeout: 20_000 });
   await expect(onItsWay).toHaveAttribute('data-status', 'sent');

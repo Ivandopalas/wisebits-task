@@ -9,10 +9,11 @@
   import MessageBubble from '#lib/components/MessageBubble.svelte';
   import Spinner from '#lib/components/Spinner.svelte';
   import { markRead, sendTyping, syncPresence } from '#lib/realtime.js';
+  import { connection } from '#lib/socket/client.js';
   import { currentUser } from '#lib/stores/auth.js';
   import { conversations } from '#lib/stores/conversations.js';
   import { messages } from '#lib/stores/messages.js';
-  import { presence } from '#lib/stores/presence.js';
+  import { peerStatus, presence } from '#lib/stores/presence.js';
   import { createTypingNotifier, typing } from '#lib/stores/typing.js';
   import { formatDayLabel, groupByDay } from '#lib/utils/format.js';
 
@@ -26,7 +27,11 @@
   const thread = $derived($messages[id]);
   const items = $derived(thread?.items ?? []);
   const groups = $derived(groupByDay(items));
-  const peerTyping = $derived(Boolean($typing[id]));
+  const status = $derived(
+    conversation
+      ? peerStatus($connection, $presence[conversation.peer.id], Boolean($typing[id]))
+      : null,
+  );
   /** Messages from the peer that arrived below while the reader was scrolled up. */
   const newBelow = $derived.by(() => {
     const from = anchorKey ? items.findIndex((m) => m.key === anchorKey) : -1;
@@ -200,13 +205,13 @@
         <span class="truncate font-semibold text-gray-900" data-testid="chat-peer">
           {conversation.peer.username}
         </span>
-        <span class="text-xs text-gray-500" data-testid="chat-status">
-          {#if peerTyping}
+        <span class="min-h-4 text-xs text-gray-500" data-testid="chat-status">
+          {#if status === 'typing'}
             <span class="text-indigo-600">typing…</span>
-          {:else if $presence[conversation.peer.id]}
-            online
-          {:else}
-            offline
+          {:else if status === 'connecting'}
+            connecting…
+          {:else if status}
+            {status}
           {/if}
         </span>
       </div>
