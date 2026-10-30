@@ -35,6 +35,8 @@ import {
   storyDtoSchema,
   storyFeedItemSchema,
   storyVideoQuerySchema,
+  type CreateStoryInput,
+  type StoryVideoQuery,
 } from '@chat/shared';
 import type { Response } from 'express';
 import { pipeline } from 'node:stream/promises';
@@ -79,7 +81,7 @@ export class StoriesController {
   )
   create(
     @UploadedFile() video: Express.Multer.File | undefined,
-    @Body({ schema: createStorySchema }) body: { durationMs: number },
+    @Body({ schema: createStorySchema }) body: CreateStoryInput,
     @CurrentUser() user: AuthUser,
   ) {
     return this.stories.create(user.id, video?.buffer, body.durationMs);
@@ -118,7 +120,7 @@ export class StoriesController {
   @Get(':id/video')
   async video(
     @Param('id', { schema: objectIdSchema }) id: string,
-    @Query({ schema: storyVideoQuerySchema }) query: { token: string },
+    @Query({ schema: storyVideoQuerySchema }) query: StoryVideoQuery,
     @Headers('range') rangeHeader: string | undefined,
     @Res() res: Response,
   ) {

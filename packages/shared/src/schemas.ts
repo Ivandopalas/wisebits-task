@@ -122,8 +122,9 @@ export const createStorySchema = z.strictObject({
       `A story can be at most ${LIMITS.storyMaxDurationMs / 1000} seconds long`,
     ),
 });
-export type CreateStoryInput = z.input<typeof createStorySchema>;
+export type CreateStoryInput = z.output<typeof createStorySchema>;
 
 export const storyVideoQuerySchema = z.strictObject({
   token: z.string().min(1).max(1024),
 });
+export type StoryVideoQuery = z.output<typeof storyVideoQuerySchema>;
