@@ -29,6 +29,11 @@ test('two people chat in real time, both ways, without reloading', async ({ brow
   await conversation.click();
   await expect(messageList(bob.page)).toContainText('Hi Bob, are you there?');
   await expect(conversation.getByTestId('unread-badge')).toHaveCount(0);
+  // The open conversation is highlighted, and its secondary text stays readable on that.
+  expect(await contrastRatio(conversation.locator('time'))).toBeGreaterThan(4.5);
+  expect(await contrastRatio(conversation.getByText('Hi Bob, are you there?'))).toBeGreaterThan(
+    4.5,
+  );
   // Alice sees that Bob has read it.
   await expect(messageList(alice.page).getByTestId('message-read')).toHaveCount(1);
 
@@ -210,11 +215,16 @@ test('history loads older messages when scrolling up', async ({ browser }) => {
   await expect(list.getByText('history 1', { exact: true })).toBeVisible();
   await expect(list).toContainText('This is the beginning of the conversation');
 
+  // A screen reader hears what is new, and none of the history loaded above.
+  const announced = bob.page.getByTestId('new-message');
+  await expect(announced).toBeEmpty();
+
   // Reading old messages, Bob is not yanked to the bottom by a new one; a button offers to jump.
   await sendMessage(alice.page, 'a fresh one');
   await sendMessage(alice.page, 'and one more');
   const jump = bob.page.getByTestId('jump-to-latest');
   await expect(list).toContainText('and one more');
+  await expect(announced).toHaveText(`${alice.username}: and one more`);
   await expect(jump.locator('span').first()).toHaveText('2');
   await expect(list.getByText('a fresh one')).not.toBeInViewport();
   await jump.click();

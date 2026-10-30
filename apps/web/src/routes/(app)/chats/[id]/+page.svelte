@@ -12,7 +12,7 @@
   import { connection } from '#lib/socket/client.js';
   import { currentUser } from '#lib/stores/auth.js';
   import { conversations } from '#lib/stores/conversations.js';
-  import { messages } from '#lib/stores/messages.js';
+  import { messages, type ChatMessage } from '#lib/stores/messages.js';
   import { peerStatus, presence } from '#lib/stores/presence.js';
   import { createTypingNotifier, typing } from '#lib/stores/typing.js';
   import { formatDayLabel, groupByDay } from '#lib/utils/format.js';
@@ -47,7 +47,10 @@
   let stickToBottom = $state(true);
   /** The last message at the moment the reader scrolled away from the bottom. */
   let anchorKey = $state<string | null>(null);
-  let lastKey: string | undefined;
+  /** Key of the last message; null in an empty thread, undefined until the thread has loaded. */
+  let lastKey: string | null | undefined;
+  /** The latest message from the peer, for screen readers. History on opening is not news. */
+  let incoming = $state.raw<ChatMessage | null>(null);
   let visible = $state(document.visibilityState === 'visible');
   const typingNotifier = createTypingNotifier(sendTyping);
 
@@ -60,6 +63,7 @@
       stickToBottom = true;
       anchorKey = null;
       lastKey = undefined;
+      incoming = null;
       loadConversation(conversationId);
       void messages.loadLatest(conversationId);
       composer?.focus();
@@ -70,10 +74,16 @@
   // A new last message: follow it if the reader is already at the bottom or sent it. Store
   // updates that do not add a message (a confirmation, a catch-up) leave the view alone.
   $effect(() => {
+    if (thread?.status !== 'ready') return;
     const last = items.at(-1);
-    if (!last || last.key === lastKey) return;
-    lastKey = last.key;
+    if ((last?.key ?? null) === lastKey) return;
+    const opening = lastKey === undefined;
+    lastKey = last?.key ?? null;
+    if (!last) return;
     const mine = last.senderId === $currentUser?.id;
+    if (!opening && !mine) {
+      incoming = last;
+    }
     if (untrack(() => stickToBottom) || mine) {
       void tick().then(scrollToBottom);
     }
@@ -205,7 +215,7 @@
         <span class="truncate font-semibold text-gray-900" data-testid="chat-peer">
           {conversation.peer.username}
         </span>
-        <span class="min-h-4 text-xs text-gray-500" data-testid="chat-status">
+        <span class="min-h-4 text-xs text-gray-500" role="status" data-testid="chat-status">
           {#if status === 'typing'}
             <span class="text-indigo-600">typing…</span>
           {:else if status === 'connecting'}
@@ -219,6 +229,13 @@
       <span class="h-4 w-32 animate-pulse rounded bg-gray-200"></span>
     {/if}
   </header>
+
+  <!-- The list itself stays quiet: a live region there would read out every page of history. -->
+  <div class="sr-only" aria-live="polite" data-testid="new-message">
+    {#key incoming?.key}
+      {#if incoming}<p>{conversation?.peer.username}: {incoming.text}</p>{/if}
+    {/key}
+  </div>
 
   <div class="relative flex min-h-0 flex-1 flex-col">
     <div
