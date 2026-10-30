@@ -257,8 +257,9 @@ describe('messages store', () => {
       await store.loadLatest(CONVERSATION);
 
       store.receive(message(4));
+      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS - 1);
       store.receive(message(3));
-      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS);
+      await vi.advanceTimersByTimeAsync(1);
 
       expect(transport.fetchPage).toHaveBeenCalledTimes(1);
     });
