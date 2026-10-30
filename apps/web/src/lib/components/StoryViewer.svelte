@@ -29,6 +29,9 @@
   let videoUrl = $state<string | null>(null);
   let dialog = $state<HTMLDialogElement>();
   let video = $state<HTMLVideoElement>();
+  let keepButton = $state<HTMLButtonElement>();
+  let linkRequest = 0;
+  let linkRenewed = false;
 
   const item = $derived(feed[authorIndex]);
   const story = $derived(item?.stories[storyIndex]);
@@ -50,20 +53,13 @@
   });
 
   $effect(() => {
-    if (!story) return;
-    let current = true;
-    videoUrl = null;
-    stories.videoUrl(story.id).then(
-      (url) => {
-        if (current) videoUrl = url;
-      },
-      (e) => {
-        if (current) error = errorMessage(e);
-      },
-    );
-    return () => {
-      current = false;
-    };
+    if (story) void requestLink(story.id);
+  });
+
+  // The button that asked is gone by now. Focus would fall to the page, and Space from there
+  // would start the video behind the question.
+  $effect(() => {
+    keepButton?.focus();
   });
 
   // Progress comes from the duration the recorder measured: some WebM files still report
@@ -76,11 +72,33 @@
     return () => cancelAnimationFrame(frame);
   });
 
+  async function requestLink(storyId: string) {
+    const request = ++linkRequest;
+    videoUrl = null;
+    try {
+      const url = await stories.videoUrl(storyId);
+      if (request === linkRequest) videoUrl = url;
+    } catch (e) {
+      if (request === linkRequest) error = errorMessage(e);
+    }
+  }
+
+  // A story can sit paused for longer than its link lives, so the first failure gets a new one.
+  function onVideoError() {
+    if (story && !linkRenewed) {
+      linkRenewed = true;
+      void requestLink(story.id);
+    } else {
+      error = 'This story could not be played.';
+    }
+  }
+
   function go(nextAuthor: number, nextStory: number) {
     progress = 0;
     paused = false;
     error = null;
     confirmingDelete = false;
+    linkRenewed = false;
     authorIndex = nextAuthor;
     storyIndex = nextStory;
   }
@@ -99,14 +117,17 @@
   }
 
   async function play() {
-    if (!video) return;
+    const element = video;
+    if (!element) return;
     try {
-      await video.play();
-    } catch {
+      await element.play();
+    } catch (e) {
+      // Pausing or moving on while the video starts also lands here, and calls for nothing.
+      if (!(e instanceof DOMException && e.name === 'NotAllowedError')) return;
       // Autoplay with sound can be refused; muted playback is always allowed.
       muted = true;
-      video.muted = true;
-      await video.play().catch(() => (paused = true));
+      element.muted = true;
+      await element.play().catch(() => (paused = true));
     }
   }
 
@@ -128,6 +149,7 @@
     confirmingDelete = false;
     paused = false;
     void play();
+    dialog?.focus();
   }
 
   async function remove() {
@@ -177,7 +199,7 @@
             if (!paused) void play();
           }}
           onended={next}
-          onerror={() => (error = 'This story could not be played.')}
+          onerror={onVideoError}
           data-testid="story-video"
         ></video>
       {/if}
@@ -270,6 +292,7 @@
           <span>Delete this story?</span>
           <div class="flex gap-2">
             <button
+              bind:this={keepButton}
               type="button"
               class="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-white/10"
               onclick={keepStory}

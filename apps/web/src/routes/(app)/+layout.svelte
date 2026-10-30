@@ -6,20 +6,24 @@
   import ConnectionBanner from '#lib/components/ConnectionBanner.svelte';
   import ConversationList from '#lib/components/ConversationList.svelte';
   import StoriesBar from '#lib/components/StoriesBar.svelte';
+  import StoryViewer from '#lib/components/StoryViewer.svelte';
   import { startRealtime, stopRealtime, syncPresence } from '#lib/realtime.js';
   import { auth } from '#lib/stores/auth.js';
   import { conversations, totalUnread } from '#lib/stores/conversations.js';
-  import { stories } from '#lib/stores/stories.js';
+  import type { StoryFeedItem } from '@chat/shared';
 
   let { children } = $props();
 
   // On narrow screens the list and the open page take turns; on wide ones they sit side by side.
   const listOnly = $derived(page.route.id === '/(app)/chats');
 
+  // Lives out here because the list can be hidden at any moment, by a rotated phone or a swipe
+  // back, and a modal dialog hidden with it would leave the whole page dead.
+  let viewing = $state<{ feed: StoryFeedItem[]; startAuthor: number } | null>(null);
+
   $effect(() => {
     startRealtime();
     void conversations.load().then(() => syncPresence());
-    void stories.load();
     return stopRealtime;
   });
 
@@ -62,7 +66,7 @@
         </button>
       </header>
 
-      <StoriesBar />
+      <StoriesBar onopen={(feed, startAuthor) => (viewing = { feed, startAuthor })} />
 
       <nav class="flex gap-1 border-b border-gray-200 px-2 py-2 text-sm font-medium">
         <a
@@ -97,3 +101,7 @@
     </main>
   </div>
 </div>
+
+{#if viewing}
+  <StoryViewer {...viewing} onclose={() => (viewing = null)} />
+{/if}

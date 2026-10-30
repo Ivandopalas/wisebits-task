@@ -4,11 +4,16 @@
   import { currentUser } from '../stores/auth.js';
   import { stories } from '../stores/stories.js';
   import Avatar from './Avatar.svelte';
-  import StoryViewer from './StoryViewer.svelte';
 
-  // The viewer gets a snapshot: a live feed re-sorts as stories are seen or posted, and the
-  // story being watched must not jump away.
-  let viewing = $state<{ feed: StoryFeedItem[]; start: number } | null>(null);
+  interface Props {
+    /**
+     * The viewer gets a snapshot: a live feed re-sorts as stories are seen or posted, and the
+     * story being watched must not jump away.
+     */
+    onopen: (feed: StoryFeedItem[], startAuthor: number) => void;
+  }
+
+  let { onopen }: Props = $props();
 
   const feed = $derived($stories.feed);
   const mine = $derived(feed[0]?.author.id === $currentUser?.id ? feed[0] : undefined);
@@ -23,11 +28,7 @@
   <div class="flex w-16 shrink-0 flex-col items-center gap-1">
     <div class="relative">
       {#if mine}
-        <button
-          type="button"
-          onclick={() => (viewing = { feed, start: 0 })}
-          aria-label="View your story"
-        >
+        <button type="button" onclick={() => onopen(feed, 0)} aria-label="View your story">
           <Avatar username={$currentUser?.username ?? '?'} size="lg" ring="seen" />
         </button>
       {:else}
@@ -52,7 +53,7 @@
     <button
       type="button"
       class="flex w-16 shrink-0 flex-col items-center gap-1"
-      onclick={() => (viewing = { feed, start: i + offset })}
+      onclick={() => onopen(feed, i + offset)}
       data-testid="story-author"
       data-unseen={item.hasUnseen}
     >
@@ -72,7 +73,3 @@
     <p class="self-center text-xs text-gray-500">No stories from others yet</p>
   {/if}
 </div>
-
-{#if viewing}
-  <StoryViewer feed={viewing.feed} startAuthor={viewing.start} onclose={() => (viewing = null)} />
-{/if}

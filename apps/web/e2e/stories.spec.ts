@@ -28,10 +28,6 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   test.setTimeout(120_000);
   const author = await signedInUser(browser);
   const viewer = await signedInUser(browser);
-  const feedRequests: string[] = [];
-  viewer.page.on('request', (request) => {
-    if (request.url().endsWith('/api/stories/feed')) feedRequests.push(request.url());
-  });
 
   await author.page.getByTestId('new-story').click();
   const recorder = author.page.getByTestId('recorder');
@@ -54,6 +50,11 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   const duration = await preview.evaluate((video: HTMLVideoElement) => video.duration);
   expect(Number.isFinite(duration)).toBe(true);
   expect(duration).toBeLessThanOrEqual(15.5);
+
+  const feedRequests: string[] = [];
+  viewer.page.on('request', (request) => {
+    if (request.url().endsWith('/api/stories/feed')) feedRequests.push(request.url());
+  });
 
   await author.page.getByRole('button', { name: 'Share story' }).click();
   await expect(author.page).toHaveURL(/\/chats$/);
@@ -83,7 +84,7 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   const ownPlayer = author.page.getByTestId('story-viewer');
   await ownPlayer.getByRole('button', { name: 'Delete' }).click();
   const confirm = author.page.getByRole('alertdialog', { name: 'Delete this story?' });
-  await expect(confirm).toBeVisible();
+  await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
   await confirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(confirm).toBeHidden();
   await expect(ownPlayer).toBeVisible();
@@ -107,7 +108,7 @@ test('the story viewer takes the keyboard and gives it back', async ({ browser }
   await viewer.page.keyboard.press('Enter');
   const player = viewer.page.getByTestId('story-viewer');
   await expect(player).toBeFocused();
-  await expect(player.getByTestId('story-video')).toBeAttached();
+  await expect(player.getByRole('alert')).toBeVisible();
 
   await viewer.page.keyboard.press('Space');
   await expect(player.getByRole('button', { name: 'Play' })).toBeVisible();
@@ -117,6 +118,47 @@ test('the story viewer takes the keyboard and gives it back', async ({ browser }
   await viewer.page.keyboard.press('Space');
   await expect(player).toBeHidden();
   await expect(ring).toBeFocused();
+
+  await author.context.close();
+  await viewer.context.close();
+});
+
+test('a story stays open and closable when a narrower screen hides the list', async ({
+  browser,
+}) => {
+  const author = await signedInUser(browser);
+  const viewer = await signedInUser(browser);
+  await publishStory(author);
+
+  await viewer.page.getByRole('link', { name: 'People', exact: true }).click();
+  await viewer.page.getByTestId('story-author').filter({ hasText: author.username }).click();
+  const player = viewer.page.getByTestId('story-viewer');
+  await expect(player).toBeVisible();
+
+  await viewer.page.setViewportSize({ width: 390, height: 800 });
+  await expect(player).toBeVisible();
+  await player.getByRole('button', { name: 'Close' }).click();
+  await expect(player).toBeHidden();
+
+  await author.context.close();
+  await viewer.context.close();
+});
+
+test('a video that fails gets one new link before the viewer gives up', async ({ browser }) => {
+  const author = await signedInUser(browser);
+  const viewer = await signedInUser(browser);
+  await publishStory(author);
+  const links: string[] = [];
+  viewer.page.on('request', (request) => {
+    if (request.url().endsWith('/playback')) links.push(request.url());
+  });
+
+  await viewer.page.getByTestId('story-author').filter({ hasText: author.username }).click();
+
+  await expect(viewer.page.getByTestId('story-viewer').getByRole('alert')).toHaveText(
+    'This story could not be played.',
+  );
+  expect(links).toHaveLength(2);
 
   await author.context.close();
   await viewer.context.close();
