@@ -259,7 +259,7 @@
         {#if thread.loadingOlder}
           <div class="flex justify-center pb-3"><Spinner /></div>
         {:else if !thread.hasMore}
-          <p class="pb-3 text-center text-xs text-gray-400">
+          <p class="pb-3 text-center text-xs text-gray-500">
             This is the beginning of the conversation
           </p>
         {/if}

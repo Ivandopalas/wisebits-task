@@ -54,14 +54,16 @@
       {#each $conversations.items as conversation (conversation.id)}
         {@const last = conversation.lastMessage}
         {@const isTyping = $typing[conversation.id]}
+        {@const active = activeId === conversation.id}
+        {@const secondary = active ? 'text-gray-600' : 'text-gray-500'}
         <li>
           <a
             href={resolve('/(app)/chats/[id]', { id: conversation.id })}
             class={[
               'flex items-center gap-3 px-4 py-3 hover:bg-gray-50',
-              activeId === conversation.id && 'bg-indigo-50 hover:bg-indigo-50',
+              active && 'bg-indigo-50 hover:bg-indigo-50',
             ]}
-            aria-current={activeId === conversation.id ? 'page' : undefined}
+            aria-current={active ? 'page' : undefined}
             data-testid="conversation-item"
           >
             <Avatar
@@ -71,12 +73,15 @@
             <span class="flex min-w-0 flex-1 flex-col">
               <span class="flex items-baseline justify-between gap-2">
                 <span class="truncate font-medium text-gray-900">{conversation.peer.username}</span>
-                <span class="shrink-0 text-xs text-gray-500">
+                <time
+                  class={['shrink-0 text-xs', secondary]}
+                  datetime={conversation.lastActivityAt}
+                >
                   {formatListTime(conversation.lastActivityAt)}
-                </span>
+                </time>
               </span>
               <span class="flex items-center justify-between gap-2">
-                <span class="truncate text-sm text-gray-500">
+                <span class={['truncate text-sm', secondary]}>
                   {#if isTyping}
                     <span class="text-indigo-600">typing…</span>
                   {:else if last}

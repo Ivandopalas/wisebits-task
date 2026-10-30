@@ -169,6 +169,32 @@ test('a conversation the peer opened survives a reload and a reconnect', async (
   await bob.context.close();
 });
 
+test('on a phone Enter starts a new line and the button sends', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName === 'firefox', 'Playwright emulates touch screens in Chromium only');
+  const alice = await signedInUser(browser, devices['Pixel 7']);
+  const bob = await signedInUser(browser);
+  await openConversationWith(alice, bob);
+
+  const composer = alice.page.getByRole('textbox', { name: 'Message' });
+  await composer.fill('first line');
+  await composer.press('Enter');
+  await composer.pressSequentially('second line');
+  await expect(composer).toHaveValue('first line\nsecond line');
+  await expect(messageList(alice.page).getByTestId('message')).toHaveCount(0);
+
+  await alice.page.getByRole('button', { name: 'Send' }).tap();
+  await expect(messageList(alice.page).getByTestId('message')).toContainText(
+    'first line\nsecond line',
+  );
+  await expect(composer).toHaveValue('');
+
+  await alice.context.close();
+  await bob.context.close();
+});
+
 test('a broken conversation link and an overlong search are no dead ends', async ({ browser }) => {
   const { page, context } = await signedInUser(browser);
   // On a phone the conversation list is hidden behind the open conversation.
@@ -213,7 +239,9 @@ test('history loads older messages when scrolling up', async ({ browser }) => {
 
   await list.evaluate((el) => (el.scrollTop = 0));
   await expect(list.getByText('history 1', { exact: true })).toBeVisible();
-  await expect(list).toContainText('This is the beginning of the conversation');
+  const beginning = list.getByText('This is the beginning of the conversation');
+  await expect(beginning).toBeVisible();
+  expect(await contrastRatio(beginning)).toBeGreaterThan(4.5);
 
   // A screen reader hears what is new, and none of the history loaded above.
   const announced = bob.page.getByTestId('new-message');
