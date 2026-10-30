@@ -2,8 +2,8 @@ import {
   type ArgumentsHost,
   Catch,
   type ExceptionFilter,
-  HttpException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { toApiError } from './to-api-error.js';
@@ -21,8 +21,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const error = toApiError(exception);
 
-    // An HttpException is an answer somebody chose to give: 503 from readiness on every shutdown.
-    if (error.statusCode >= 500 && !(exception instanceof HttpException)) {
+    // A 503 is a refusal, not a failure: readiness answers it on every shutdown.
+    if (error.statusCode >= 500 && !(exception instanceof ServiceUnavailableException)) {
       this.logger.error({ err: exception, path: request.originalUrl }, 'Unhandled error');
     }
     if (response.headersSent) {
