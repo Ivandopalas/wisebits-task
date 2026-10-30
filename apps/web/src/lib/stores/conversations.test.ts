@@ -76,6 +76,15 @@ describe('conversations store', () => {
     expect(get(store).items[0]!.unreadCount).toBe(0);
   });
 
+  it('keeps the unread count when my other tab has read only part of it', async () => {
+    const lastMessage = { id: 'm3', seq: 3, senderId: 'peer-a', text: 'new', createdAt: '' };
+    const { store } = setup([conversation('a', 1, { lastMessage, unreadCount: 2 })]);
+    await store.load();
+
+    store.applyRead({ conversationId: 'a', userId: 'me', seq: 2 }, 'me');
+    expect(get(store).items[0]!.unreadCount).toBe(2);
+  });
+
   it('fetches an unknown conversation once and reuses it', async () => {
     const { store, client } = setup();
     await store.load();
