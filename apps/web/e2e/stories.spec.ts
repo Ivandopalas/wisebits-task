@@ -170,7 +170,12 @@ test('an empty stories bar is readable and has one tab stop to the recorder', as
   const user = await signedInUser(browser);
   await user.page.route('**/api/stories/feed', (route) => route.fulfill({ json: [] }));
   // Stories published by tests running in parallel would otherwise arrive live and fill the bar.
-  await user.page.routeWebSocket(/\/socket\.io\//, (ws) => ws.close());
+  await user.page.routeWebSocket(/\/socket\.io\//, (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((frame) => {
+      if (!String(frame).includes('story:created')) ws.send(frame);
+    });
+  });
   await user.page.reload();
 
   const bar = user.page.getByTestId('stories-bar');
