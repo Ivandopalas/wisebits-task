@@ -1,4 +1,4 @@
-import type { ConversationDto } from '@chat/shared';
+import type { ConversationDto, MessageDto } from '@chat/shared';
 import { get } from 'svelte/store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,6 +23,7 @@ vi.mock('./socket/client.js', async () => {
 const { PRESENCE_RESYNC_MS, startRealtime, stopRealtime } = await import('./realtime.js');
 const { conversations } = await import('./stores/conversations.js');
 const { presence } = await import('./stores/presence.js');
+const { typing } = await import('./stores/typing.js');
 
 const peer = { id: 'peer-1', username: 'carol', createdAt: '2026-10-29T10:00:00.000Z' };
 const conversation: ConversationDto = {
@@ -35,7 +36,23 @@ const conversation: ConversationDto = {
   createdAt: peer.createdAt,
 };
 
-describe('realtime presence', () => {
+const message: MessageDto = {
+  id: 'm1',
+  conversationId: conversation.id,
+  seq: 1,
+  senderId: peer.id,
+  text: 'hello',
+  clientMessageId: 'client-1',
+  createdAt: peer.createdAt,
+};
+
+/** Delivers a server event to the handler the app registered for it. */
+function fire(event: string, payload: unknown) {
+  const handler = socket.on.mock.calls.findLast(([name]) => name === event)![1];
+  (handler as (payload: unknown) => void)(payload);
+}
+
+describe('realtime', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('document', { visibilityState: 'visible' });
@@ -75,5 +92,15 @@ describe('realtime presence', () => {
     socket.open.mock.lastCall![0].onDisconnect();
 
     expect(get(presence)).toEqual({});
+  });
+
+  it('takes "typing…" down when the message it announced arrives', () => {
+    startRealtime();
+    fire('typing', { conversationId: conversation.id, userId: peer.id, isTyping: true });
+    expect(get(typing)[conversation.id]).toBe(true);
+
+    fire('message:new', { message, conversation });
+
+    expect(get(typing)[conversation.id]).toBe(false);
   });
 });
