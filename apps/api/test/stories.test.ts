@@ -1,9 +1,11 @@
+import { getModelToken } from '@nestjs/mongoose';
 import type { StoryDto, StoryFeedItem } from '@chat/shared';
-import { Types } from 'mongoose';
+import { Types, type Model } from 'mongoose';
 import request from 'supertest';
 import { VideoStorage } from '../src/storage/video-storage.js';
 import { StoriesCleanupJob } from '../src/stories/stories-cleanup.job.js';
 import { FEED_LIMIT } from '../src/stories/stories.service.js';
+import { Story } from '../src/stories/story.schema.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import { connect, disconnectAll, nextEvent } from './helpers/sockets.js';
 import { registerUser, type TestUser } from './helpers/users.js';
@@ -80,6 +82,15 @@ describe('stories', () => {
       await upload(user, fakeWebm(), { durationMs: '16000' }).expect(400);
       await upload(user, fakeWebm(), { durationMs: '15400' }).expect(201);
       await upload(user, null).expect(400);
+    });
+
+    it('removes the stored video when the story itself cannot be saved', async () => {
+      const user = await registerUser(t.url);
+      vi.spyOn(t.app.get<Model<Story>>(getModelToken(Story.name)), 'create').mockRejectedValueOnce(
+        new Error('write failed'),
+      );
+      await upload(user, fakeWebm()).expect(500);
+      expect(await bucketFiles().countDocuments({ 'metadata.ownerId': user.user.id })).toBe(0);
     });
 
     it('requires authentication', async () => {
