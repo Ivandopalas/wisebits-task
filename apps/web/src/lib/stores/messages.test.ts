@@ -1,7 +1,7 @@
 import type { AckResponse, MessageDto, MessagesPage, WsSendMessagePayload } from '@chat/shared';
 import { get } from 'svelte/store';
-import { describe, expect, it, vi } from 'vitest';
-import { createMessagesStore, type MessagesTransport } from './messages.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMessagesStore, GAP_WAIT_MS, type MessagesTransport } from './messages.js';
 
 vi.mock('../socket/client.js', () => ({ request: vi.fn() }));
 vi.mock('./auth.js', () => ({ auth: { subscribe: () => () => undefined } }));
@@ -197,5 +197,101 @@ describe('messages store', () => {
     await store.catchUp(CONVERSATION);
     expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { after: 4, limit: 100 });
     expect(items().map((m) => m.seq)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('catches up from the first hole, not from the newest message', async () => {
+    const { store, transport, items } = setup([
+      { items: [message(1), message(2)], hasMore: false },
+      { items: [message(3), message(4), message(5)], hasMore: false },
+    ]);
+    await store.loadLatest(CONVERSATION);
+    store.receive(message(5));
+
+    await store.catchUp(CONVERSATION);
+
+    expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { after: 2, limit: 100 });
+    expect(items().map((m) => m.seq)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('pages through everything missed, however much that is', async () => {
+    const hundredFrom = (seq: number) => Array.from({ length: 100 }, (_, i) => message(seq + i));
+    const { store, transport, items } = setup([
+      { items: [message(1), message(2)], hasMore: false },
+      { items: hundredFrom(3), hasMore: true },
+      { items: hundredFrom(103), hasMore: true },
+      { items: [message(203)], hasMore: false },
+    ]);
+    await store.loadLatest(CONVERSATION);
+
+    await store.catchUp(CONVERSATION);
+
+    expect(items().map((m) => m.seq)).toEqual(Array.from({ length: 203 }, (_, i) => i + 1));
+    expect(vi.mocked(transport.fetchPage).mock.calls.map(([, query]) => query.after)).toEqual([
+      undefined,
+      2,
+      102,
+      202,
+    ]);
+  });
+
+  describe('a message that skips ahead in seq', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('brings in what it skipped over', async () => {
+      const { store, transport, items } = setup([
+        { items: [message(1), message(2)], hasMore: false },
+        { items: [message(3), message(4), message(5)], hasMore: false },
+      ]);
+      await store.loadLatest(CONVERSATION);
+
+      store.receive(message(5));
+      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS);
+
+      expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { after: 2, limit: 100 });
+      expect(items().map((m) => m.seq)).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('gives one that is merely late a moment to arrive', async () => {
+      const { store, transport } = setup();
+      await store.loadLatest(CONVERSATION);
+
+      store.receive(message(4));
+      store.receive(message(3));
+      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS);
+
+      expect(transport.fetchPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('is noticed in the confirmation of my own message too', async () => {
+      const { store, transport, replyWith } = setup();
+      await store.loadLatest(CONVERSATION);
+      replyWith(async (p) => ({ ok: true, data: message(4, { ...p, senderId: ME }) }));
+
+      await store.send(CONVERSATION, 'hello');
+      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS);
+
+      expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { after: 2, limit: 100 });
+    });
+
+    it('is noticed in a conversation that was empty', async () => {
+      const { store, transport } = setup([{ items: [], hasMore: false }]);
+      await store.loadLatest(CONVERSATION);
+
+      store.receive(message(2));
+      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS);
+
+      expect(transport.fetchPage).toHaveBeenLastCalledWith(CONVERSATION, { after: 0, limit: 100 });
+    });
+
+    it('does not take history that is not loaded yet for a hole', async () => {
+      const { store, transport } = setup([{ items: [message(10), message(11)], hasMore: true }]);
+      await store.loadLatest(CONVERSATION);
+
+      store.receive(message(12));
+      await vi.advanceTimersByTimeAsync(GAP_WAIT_MS);
+
+      expect(transport.fetchPage).toHaveBeenCalledTimes(1);
+    });
   });
 });

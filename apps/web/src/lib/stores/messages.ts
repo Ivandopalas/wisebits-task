@@ -48,7 +48,7 @@ export interface MessagesTransport {
 export interface MessagesStore extends Readable<MessagesState> {
   loadLatest(conversationId: string): Promise<void>;
   loadOlder(conversationId: string): Promise<void>;
-  /** Fetches everything after the last confirmed message: used after a reconnect. */
+  /** Fetches everything above the first hole in the thread: used after a reconnect. */
   catchUp(conversationId: string): Promise<void>;
   receive(message: MessageDto): void;
   send(conversationId: string, text: string): Promise<void>;
@@ -63,6 +63,8 @@ const PAGE_SIZE = 30;
 /** The gateway accepts 10 sends a second per socket; a queue waits for the next window. */
 const RATE_LIMIT_PAUSE_MS = 1000;
 const RATE_LIMIT_RETRIES = 5;
+/** Messages can overtake each other on the way from different API replicas. */
+export const GAP_WAIT_MS = 1000;
 
 function confirmed(message: MessageDto): ChatMessage {
   return { ...message, key: message.clientMessageId, status: 'sent' };
@@ -89,8 +91,21 @@ function mergeMessages(items: ChatMessage[], incoming: MessageDto[]): ChatMessag
   return order([...byKey.values()]);
 }
 
-function lastSeq(thread: Thread | undefined): number {
-  return thread?.items.reduce((max, m) => Math.max(max, m.seq ?? 0), 0) ?? 0;
+/** The seq up to which the thread has no holes; history not loaded yet is not a hole. */
+function contiguousSeq(thread: Thread | undefined): number {
+  const seqs = thread?.items.flatMap((m) => m.seq ?? []) ?? [];
+  let last = thread?.hasMore ? (seqs[0] ?? 1) - 1 : 0;
+  for (const seq of seqs) {
+    if (seq !== last + 1) break;
+    last = seq;
+  }
+  return last;
+}
+
+/** The server has no holes in seq, so one here is a message lost on its way to this client. */
+function hasHole(thread: Thread | undefined): boolean {
+  const newest = thread?.items.findLast((m) => m.seq !== null)?.seq ?? 0;
+  return thread?.status === 'ready' && newest > contiguousSeq(thread);
 }
 
 export function createMessagesStore(
@@ -98,6 +113,7 @@ export function createMessagesStore(
   currentUserId: () => string | null,
 ): MessagesStore {
   const state = writable<MessagesState>({});
+  const gapTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let retrying: Promise<void> | null = null;
 
   function patch(conversationId: string, change: (thread: Thread) => Partial<Thread>) {
@@ -113,6 +129,19 @@ export function createMessagesStore(
     }));
   }
 
+  function fillHoleSoon(conversationId: string) {
+    if (gapTimers.has(conversationId) || !hasHole(get(state)[conversationId])) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      gapTimers.delete(conversationId);
+      if (hasHole(get(state)[conversationId])) {
+        void catchUp(conversationId).catch(() => undefined);
+      }
+    }, GAP_WAIT_MS);
+    gapTimers.set(conversationId, timer);
+  }
+
   /** Resolves with the status code of a rejection, or null once the message is in. */
   async function deliver(message: ChatMessage): Promise<number | null> {
     patchMessage(message.conversationId, message.key, { status: 'sending', error: undefined });
@@ -124,6 +153,7 @@ export function createMessagesStore(
       });
       if (ack.ok) {
         patch(message.conversationId, (t) => ({ items: mergeMessages(t.items, [ack.data]) }));
+        fillHoleSoon(message.conversationId);
         return null;
       }
       const transient = ack.error.statusCode === 429 || ack.error.statusCode >= 500;
@@ -144,7 +174,7 @@ export function createMessagesStore(
   }
 
   async function catchUp(conversationId: string) {
-    let after = lastSeq(get(state)[conversationId]);
+    let after = contiguousSeq(get(state)[conversationId]);
     for (;;) {
       const page = await transport.fetchPage(conversationId, { after, limit: 100 });
       patch(conversationId, (t) => ({ items: mergeMessages(t.items, page.items) }));
@@ -211,6 +241,7 @@ export function createMessagesStore(
 
     receive(message) {
       patch(message.conversationId, (t) => ({ items: mergeMessages(t.items, [message]) }));
+      fillHoleSoon(message.conversationId);
     },
 
     async send(conversationId, text) {
@@ -268,6 +299,8 @@ export function createMessagesStore(
         .map(([id]) => id),
 
     reset() {
+      gapTimers.forEach(clearTimeout);
+      gapTimers.clear();
       state.set({});
     },
   };
