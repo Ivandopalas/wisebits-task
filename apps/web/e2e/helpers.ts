@@ -2,6 +2,7 @@ import {
   expect,
   type Browser,
   type BrowserContext,
+  type BrowserContextOptions,
   type Locator,
   type Page,
 } from '@playwright/test';
@@ -27,8 +28,12 @@ export function uniqueUsername(prefix = 'e2e'): string {
  * A signed-in user in a browser context of their own. Registration goes through the API with
  * the context's request client, so the session cookies land in that browser.
  */
-export async function signedInUser(browser: Browser, username = uniqueUsername()): Promise<Person> {
-  const context = await browser.newContext();
+export async function signedInUser(
+  browser: Browser,
+  options: BrowserContextOptions = {},
+): Promise<Person> {
+  const context = await browser.newContext(options);
+  const username = uniqueUsername();
   const email = `${username}@example.com`;
   const response = await context.request.post('/api/auth/register', {
     data: { email, username, password: PASSWORD },

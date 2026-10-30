@@ -172,7 +172,9 @@
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    // A touch keyboard has no Shift+Enter: there Enter starts a new line and the button sends.
+    const touch = matchMedia('(pointer: coarse)').matches;
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !touch) {
       event.preventDefault();
       submit();
     }
