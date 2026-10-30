@@ -14,6 +14,12 @@ services:
       - --quiet
       - --setParameter
       - transactionLifetimeLimitSeconds=10
+    environment:
+      # The image sets rseq=0 so TCMalloc can run per-CPU caches on its own rseq registration.
+      # That registration breaks on Linux 6.19+ (SERVER-121912), and mongod 8.0.30+ refuses to
+      # start there. With rseq=1 glibc keeps rseq, TCMalloc falls back to per-thread caches and
+      # mongod starts on any kernel. Drop once the pinned image works on 6.19+ without it.
+      GLIBC_TUNABLES: glibc.pthread.rseq=1
     # No port on the host: the stack does not need one, and a local mongod would clash with it.
     # Local development publishes it through docker-compose.dev.yml (`pnpm db:up`).
     volumes:
