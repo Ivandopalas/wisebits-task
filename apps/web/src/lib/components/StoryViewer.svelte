@@ -173,7 +173,9 @@
           playsinline
           preload="auto"
           {muted}
-          onloadeddata={play}
+          onloadeddata={() => {
+            if (!paused) void play();
+          }}
           onended={next}
           onerror={() => (error = 'This story could not be played.')}
           data-testid="story-video"
