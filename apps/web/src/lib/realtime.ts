@@ -49,7 +49,7 @@ export function startRealtime(): void {
   socket.on('conversation:read', (event) => conversations.applyRead(event, myId()));
   socket.on('typing', (event) => typing.set(event.conversationId, event.isTyping));
   socket.on('presence', (event) => presence.set(event.userId, event.online));
-  socket.on('story:created', () => stories.reloadSoon());
+  socket.on('story:created', (event) => stories.add(event, myId()));
   socket.on('story:deleted', (event) => stories.remove(event.storyId));
 
   clearInterval(presenceTimer);

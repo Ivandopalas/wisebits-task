@@ -1,4 +1,4 @@
-import type { StoryDto, StoryFeedItem, StoryPlaybackDto } from '@chat/shared';
+import type { StoryCreatedEvent, StoryDto, StoryFeedItem, StoryPlaybackDto } from '@chat/shared';
 import { writable, type Readable } from 'svelte/store';
 import { api, ApiRequestError, errorMessage, parse } from '../api/http.js';
 import { auth } from './auth.js';
@@ -7,7 +7,6 @@ export interface StoriesState {
   feed: StoryFeedItem[];
   status: 'idle' | 'loading' | 'ready' | 'error';
   error: string | null;
-  loadedAt: number;
 }
 
 export interface StoriesApi {
@@ -19,8 +18,8 @@ export interface StoriesApi {
 
 export interface StoriesStore extends Readable<StoriesState> {
   load(): Promise<void>;
-  /** A reload a little later, merged with any others asked for in the meantime. */
-  reloadSoon(): void;
+  /** Puts an announced story into the feed; the server is not asked for anything. */
+  add(event: StoryCreatedEvent, viewerId: string): void;
   /** A fresh link to play a story with, asked for each time it is opened. */
   videoUrl(storyId: string): Promise<string>;
   markViewed(storyId: string): void;
@@ -30,22 +29,52 @@ export interface StoriesStore extends Readable<StoriesState> {
   reset(): void;
 }
 
-const initial = (): StoriesState => ({ feed: [], status: 'idle', error: null, loadedAt: 0 });
+const initial = (): StoriesState => ({ feed: [], status: 'idle', error: null });
 
-// A new story is announced to everyone online at once. Reloading at a random moment within
-// this window spreads their feed requests instead of having them all arrive together.
-export const RELOAD_SPREAD_MS = 2000;
+type FeedChange = (feed: StoryFeedItem[]) => StoryFeedItem[];
 
 function withoutStory(feed: StoryFeedItem[], storyId: string): StoryFeedItem[] {
   return feed
-    .map((item) => ({ ...item, stories: item.stories.filter((s) => s.id !== storyId) }))
+    .map((item) => {
+      const stories = item.stories.filter((s) => s.id !== storyId);
+      return { ...item, stories, hasUnseen: stories.some((s) => !s.viewed) };
+    })
     .filter((item) => item.stories.length > 0);
+}
+
+/** Puts the story where the server would: my own first, then the newest with something unseen. */
+function withStory(
+  feed: StoryFeedItem[],
+  { story, author }: StoryCreatedEvent,
+  viewerId: string,
+): StoryFeedItem[] {
+  const existing = feed.find((item) => item.author.id === author.id);
+  if (existing?.stories.some((s) => s.id === story.id)) {
+    return feed;
+  }
+  const own = author.id === viewerId;
+  const item: StoryFeedItem = {
+    author,
+    stories: [...(existing?.stories ?? []), { ...story, viewed: own }],
+    hasUnseen: !own,
+    latestAt: story.createdAt,
+  };
+  const others = feed.filter((other) => other !== existing);
+  return others.toSpliced(!own && others[0]?.author.id === viewerId ? 1 : 0, 0, item);
 }
 
 export function createStoriesStore(client: StoriesApi): StoriesStore {
   const state = writable<StoriesState>(initial());
   let loading: Promise<void> | null = null;
-  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  // A loaded feed replaces the current one and may have been read before these happened.
+  let changesDuringLoad: FeedChange[] = [];
+
+  const change = (apply: FeedChange) => {
+    if (loading) {
+      changesDuringLoad.push(apply);
+    }
+    state.update((s) => ({ ...s, feed: apply(s.feed) }));
+  };
 
   const store: StoriesStore = {
     subscribe: state.subscribe,
@@ -54,8 +83,9 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
       loading ??= (async () => {
         state.update((s) => ({ ...s, status: s.feed.length ? s.status : 'loading', error: null }));
         try {
-          const feed = await client.feed();
-          state.set({ feed, status: 'ready', error: null, loadedAt: Date.now() });
+          const loaded = await client.feed();
+          const feed = changesDuringLoad.reduce((current, apply) => apply(current), loaded);
+          state.set({ feed, status: 'ready', error: null });
         } catch (error) {
           state.update((s) => ({
             ...s,
@@ -65,15 +95,13 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
         }
       })().finally(() => {
         loading = null;
+        changesDuringLoad = [];
       });
       return loading;
     },
 
-    reloadSoon() {
-      reloadTimer ??= setTimeout(() => {
-        reloadTimer = undefined;
-        void store.load();
-      }, Math.random() * RELOAD_SPREAD_MS);
+    add(event, viewerId) {
+      change((feed) => withStory(feed, event, viewerId));
     },
 
     async videoUrl(storyId) {
@@ -89,30 +117,27 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
     },
 
     markViewed(storyId) {
-      state.update((s) => ({
-        ...s,
-        feed: s.feed.map((item) => {
+      change((feed) =>
+        feed.map((item) => {
           const stories = item.stories.map((story) =>
             story.id === storyId ? { ...story, viewed: true } : story,
           );
           return { ...item, stories, hasUnseen: stories.some((story) => !story.viewed) };
         }),
-      }));
+      );
       void client.markViewed(storyId).catch(() => undefined);
     },
 
     remove(storyId) {
-      state.update((s) => ({ ...s, feed: withoutStory(s.feed, storyId) }));
+      change((feed) => withoutStory(feed, storyId));
     },
 
     async deleteOwn(storyId) {
       await client.remove(storyId);
-      state.update((s) => ({ ...s, feed: withoutStory(s.feed, storyId) }));
+      store.remove(storyId);
     },
 
     reset() {
-      clearTimeout(reloadTimer);
-      reloadTimer = undefined;
       state.set(initial());
     },
   };
@@ -167,7 +192,5 @@ export async function uploadStory(
   if (response.status === 401) {
     response = await attempt(await auth.refresh());
   }
-  const story = await parse<StoryDto>(response);
-  void stories.load();
-  return story;
+  return parse<StoryDto>(response);
 }

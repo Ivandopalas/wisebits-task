@@ -1,4 +1,4 @@
-import type { ApiError, ConversationDto, MessageDto } from './dto.js';
+import type { ApiError, ConversationDto, MessageDto, StoryDto, UserDto } from './dto.js';
 import type {
   WsMarkReadPayload,
   WsPresenceQueryPayload,
@@ -42,8 +42,9 @@ export interface PresenceEvent {
 }
 
 export interface StoryCreatedEvent {
-  storyId: string;
-  authorId: string;
+  /** One payload for everyone, so `viewed` is false even for the author's own tabs. */
+  story: StoryDto;
+  author: UserDto;
 }
 
 export interface StoryDeletedEvent {

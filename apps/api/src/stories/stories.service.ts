@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -51,6 +52,10 @@ export class StoriesService {
     if (!mimeType || !STORY_MIME_TYPES.includes(mimeType)) {
       throw new UnsupportedMediaTypeException('Only WebM and MP4 videos are accepted');
     }
+    const author = await this.users.findById(authorId);
+    if (!author) {
+      throw new UnauthorizedException('User no longer exists');
+    }
 
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + LIMITS.storyTtlMs);
@@ -78,8 +83,10 @@ export class StoriesService {
       throw error;
     }
 
-    this.realtime.emitToAll('story:created', { storyId: story._id.toString(), authorId });
-    return this.toDto(story, false);
+    // Complete enough to show: otherwise every online client would have to fetch the feed.
+    const dto = this.toDto(story, false);
+    this.realtime.emitToAll('story:created', { story: dto, author: toUserDto(author) });
+    return dto;
   }
 
   /** Authors with live stories: mine first, then those with something unseen, newest first. */

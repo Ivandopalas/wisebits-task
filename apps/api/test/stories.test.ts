@@ -103,12 +103,13 @@ describe('stories', () => {
       await request(t.url).post('/api/stories').attach('video', fakeWebm(), 'a.webm').expect(401);
     });
 
-    it('announces new stories to everyone online', async () => {
+    it('announces a new story to everyone online, complete enough to show', async () => {
       const [author, watcher] = await Promise.all([registerUser(t.url), registerUser(t.url)]);
       const socket = await connect(t.url, watcher.accessToken);
       const announced = nextEvent(socket, 'story:created');
       const story = (await upload(author, fakeWebm()).expect(201)).body as StoryDto;
-      expect(await announced).toEqual({ storyId: story.id, authorId: author.user.id });
+      const { id, username, createdAt } = author.user;
+      expect(await announced).toEqual({ story, author: { id, username, createdAt } });
     });
   });
 

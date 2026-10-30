@@ -129,7 +129,7 @@ describe('two API instances', () => {
       .field('durationMs', '5000')
       .attach('video', fakeWebm(), { filename: 'a.webm', contentType: 'video/webm' })
       .expect(201);
-    expect((await announced).authorId).toBe(bob.user.id);
+    expect((await announced).author.id).toBe(bob.user.id);
   });
 
   it('shares the session: a token issued by one instance works on the other', async () => {
