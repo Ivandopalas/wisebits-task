@@ -120,6 +120,30 @@ describe('chat socket', () => {
     });
   });
 
+  describe('when the server could not check the token', () => {
+    it('tries again shortly with the same one', async () => {
+      const { options, socket } = setup();
+      socket.reject(SOCKET_ERROR.unavailable);
+
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(socket.connect).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(socket.connect).toHaveBeenCalledOnce();
+      expect(options.refresh).not.toHaveBeenCalled();
+    });
+
+    it('does not come back after the user has signed out', async () => {
+      const { socket } = setup();
+      socket.reject(SOCKET_ERROR.unavailable);
+
+      closeSocket();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(socket.connect).not.toHaveBeenCalled();
+    });
+  });
+
   it('leaves a network error to the retries of socket.io', async () => {
     const { options, socket } = setup();
     socket.fire('connect_error', new Error('websocket error'));
@@ -184,6 +208,16 @@ describe('chat socket', () => {
       await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS);
 
       expect(get(connection)).toBe('offline');
+    });
+
+    it('leaves the reconnect to the network coming back', async () => {
+      const { socket } = setup();
+      socket.reject(SOCKET_ERROR.unavailable);
+
+      goOffline();
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(socket.connect).not.toHaveBeenCalled();
     });
 
     it('fails requests at once rather than after the ack timeout', async () => {

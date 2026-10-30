@@ -15,6 +15,7 @@ export const connection = writable<ConnectionStatus>('idle');
 const ACK_TIMEOUT_MS = 10_000;
 /** The socket is closed on every token expiry; a reconnect within this time goes unnoticed. */
 export const OUTAGE_GRACE_MS = 1500;
+const RETRY_DELAY_MS = 2000;
 
 let socket: ChatSocket | null = null;
 let detachListeners: (() => void) | null = null;
@@ -57,6 +58,7 @@ export function openSocket(options: SocketOptions): ChatSocket {
   connection.set('connecting');
 
   let outageTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const reportOutageSoon = () => {
     outageTimer ??= setTimeout(() => {
@@ -64,15 +66,20 @@ export function openSocket(options: SocketOptions): ChatSocket {
       options.onConnectionLost();
     }, OUTAGE_GRACE_MS);
   };
+  const retrySoon = () => {
+    retryTimer = setTimeout(() => instance.connect(), RETRY_DELAY_MS);
+  };
 
   // The browser knows the network is gone: close now rather than notice by the ping timeout,
   // 45 s later, and leave the retries until it is back.
   const dropConnection = () => {
+    clearTimeout(retryTimer);
     instance.disconnect();
     reportOutageSoon();
   };
   const reconnectNow = () => {
     if (!instance.connected) {
+      clearTimeout(retryTimer);
       instance.disconnect().connect();
     }
   };
@@ -87,6 +94,7 @@ export function openSocket(options: SocketOptions): ChatSocket {
   document.addEventListener('visibilitychange', onVisibilityChange);
   detachListeners = () => {
     clearTimeout(outageTimer);
+    clearTimeout(retryTimer);
     window.removeEventListener('offline', dropConnection);
     window.removeEventListener('online', reconnectNow);
     document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -113,13 +121,14 @@ export function openSocket(options: SocketOptions): ChatSocket {
     if (instance.active) {
       return; // a network problem: socket.io keeps retrying on its own
     }
-    // Rejected by the server's auth middleware: retrying only helps with a new token.
+    // Turned down by the server's auth middleware: socket.io will not try again by itself.
     const code = error.data?.code;
-    if (code === SOCKET_ERROR.tokenExpired || code === SOCKET_ERROR.unauthorized) {
-      options.refresh().then(
-        (token) => (token ? instance.connect() : options.onUnauthorized()),
-        () => setTimeout(() => instance.connect(), 2000),
-      );
+    if (code === SOCKET_ERROR.unavailable) {
+      retrySoon();
+    } else if (code === SOCKET_ERROR.tokenExpired || code === SOCKET_ERROR.unauthorized) {
+      options
+        .refresh()
+        .then((token) => (token ? instance.connect() : options.onUnauthorized()), retrySoon);
     }
   });
 
