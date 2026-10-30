@@ -68,7 +68,7 @@
   {/each}
 
   {#if $stories.status === 'ready' && others.length === 0}
-    <p class="self-center text-xs text-gray-400">No stories from others yet</p>
+    <p class="self-center text-xs text-gray-500">No stories from others yet</p>
   {/if}
 </div>
 
