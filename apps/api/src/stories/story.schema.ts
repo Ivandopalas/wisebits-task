@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { STORY_MIME_TYPES, type StoryMimeType } from '@chat/shared';
-import { Types, type HydratedDocument } from 'mongoose';
+import { Types } from 'mongoose';
 
 @Schema({ collection: 'stories', timestamps: { createdAt: true, updatedAt: false } })
 export class Story {
   _id: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: true, index: true })
+  @Prop({ type: Types.ObjectId, required: true })
   authorId: Types.ObjectId;
 
   @Prop({ required: true })
@@ -31,7 +31,6 @@ export class Story {
   createdAt: Date;
 }
 
-export type StoryDocument = HydratedDocument<Story>;
 export const StorySchema = SchemaFactory.createForClass(Story);
 
 @Schema({ collection: 'story_views', timestamps: { createdAt: true, updatedAt: false } })
