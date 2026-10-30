@@ -127,8 +127,8 @@ triggers the same catch-up.
 use; replaying a rotated token revokes the whole session, except within 10 seconds, which is a race
 between the user's own tabs (a Web Lock also serializes refreshes across tabs). A socket is closed
 when its token expires, and the client reconnects with a fresh one; signing out or revoking a
-session closes its sockets on every replica. Passwords are hashed with argon2id; a wrong password and an unknown email get the same
-answer in the same time.
+session closes its sockets on every replica. Passwords are hashed with argon2id; a wrong password
+and an unknown email get the same answer in the same time.
 
 **Scaling.** `@socket.io/mongo-adapter` writes broadcasts into a capped collection that every replica
 tails through a change stream (cursor tailing over the oplog, with resume tokens). MongoDB is
@@ -147,15 +147,18 @@ size but does not probe the video, since the brief rules out video processing. V
 behind a `VideoStorage` interface (S3 would be a second implementation) and stream with HTTP Range
 support. `<video>` cannot send an Authorization header, so the client asks for a short-lived signed
 link when a story is opened. A new story travels in the socket event itself: clients add it to
-their feed without a request, so one upload does not make everyone reload the feed. A TTL index removes expired story documents but not GridFS files, so a
-job on every replica deletes the files, idempotently; every query also filters on expiry. Chrome
-writes WebM without a duration, so the client writes it into the file before upload.
+their feed without a request, so one upload does not make everyone reload the feed. A TTL index
+removes expired story documents but not GridFS files, so a job on every replica deletes the files,
+idempotently; every query also filters on expiry. Chrome writes WebM without a duration, so the
+client writes it into the file before upload.
 
 **Front end.** Application state lives in Svelte stores (`auth`, `conversations`, `messages`,
 `presence`, `typing`, `stories`, connection status); components use runes for local state.
 
 **Known limits.** If a replica dies between committing a message and broadcasting it, the recipient
-sees it with the next message or a reload, through the `seq` gap (an outbox would close this). The
+sees it with the next message or a reload, through the `seq` gap (an outbox would close this). A
+crashed replica can leave a transaction open and its conversation locked for up to 10 seconds, the
+limit the Compose file sets on MongoDB; on a managed MongoDB that is a server setting. The
 per-socket rate limit counts per replica (nginx holds the shared sign-in limit). Story duration is
 checked as declared. The Compose file ships a demo JWT secret and
 `COOKIE_SECURE=false` for `http://localhost`; set both for anything real.
@@ -184,8 +187,9 @@ pnpm --filter @chat/web exec playwright install chromium firefox
 pnpm test:e2e
 ```
 
-The end-to-end suite registers new users on every run, so more than about three runs in a row hit
-the sign-in rate limit (30 per minute per address).
+The suite targets `http://localhost:8080`; set `E2E_BASE_URL` for another port. It registers new
+users on every run, so more than about three runs in a row hit the sign-in rate limit (30 per minute
+per address).
 
 ## Local development
 
