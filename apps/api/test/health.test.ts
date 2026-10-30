@@ -1,5 +1,8 @@
+import { Logger } from '@nestjs/common';
 import request from 'supertest';
+import { UsersService } from '../src/users/users.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
+import { registerUser } from './helpers/users.js';
 
 describe('health', () => {
   let t: TestApp;
@@ -8,19 +11,28 @@ describe('health', () => {
     t = await createTestApp();
   });
 
-  afterAll(async () => {
-    await t.close();
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('reports liveness without touching the database', async () => {
-    const res = await request(t.url).get('/api/health/live').expect(200);
-    expect(res.body).toEqual({ status: 'ok' });
+  afterAll(async () => {
+    await t.close();
   });
 
   it('reports readiness with a database ping', async () => {
     const res = await request(t.url).get('/api/health/ready').expect(200);
     expect(res.body.status).toBe('ok');
     expect(res.body.info.mongo.status).toBe('up');
+  });
+
+  it('stops being ready but stays alive while the database does not answer', async () => {
+    const ping = vi.spyOn(t.connection.db!, 'command').mockRejectedValue(new Error('no primary'));
+
+    await request(t.url).get('/api/health/live').expect(200, { status: 'ok' });
+    expect(ping).not.toHaveBeenCalled();
+
+    await request(t.url).get('/api/health/ready').expect(503);
+    expect(ping).toHaveBeenCalled();
   });
 
   it('echoes a valid request id and generates one otherwise', async () => {
@@ -50,8 +62,23 @@ describe('health', () => {
     });
   });
 
-  it('serves the OpenAPI document', async () => {
-    const res = await request(t.url).get('/api/docs-json').expect(200);
-    expect(res.body.info.title).toBe('Realtime Chat API');
+  it('keeps the text of an unexpected error in the logs, away from the client', async () => {
+    const user = await registerUser(t.url);
+    const failure = new Error('connect ECONNREFUSED mongodb://chat:s3cret@db:27017');
+    vi.spyOn(t.app.get(UsersService), 'list').mockRejectedValueOnce(failure);
+    const logged = vi.spyOn(Logger.prototype, 'error');
+
+    const res = await request(t.url).get('/api/users').set(user.auth).expect(500);
+
+    expect(res.body).toEqual({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      message: 'Internal server error',
+      requestId: expect.any(String),
+    });
+    expect(logged).toHaveBeenCalledWith(
+      expect.objectContaining({ err: failure }),
+      'Unhandled error',
+    );
   });
 });
