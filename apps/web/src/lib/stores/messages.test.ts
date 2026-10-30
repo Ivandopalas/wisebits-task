@@ -156,6 +156,16 @@ describe('messages store', () => {
     }
   });
 
+  it('turns the line and page breaks pasted from Word into plain ones', async () => {
+    const { store, items, sent } = setup();
+    await store.loadLatest(CONVERSATION);
+
+    await store.send(CONVERSATION, 'first\u000bsecond\u000cthird');
+
+    expect(sent[0]!.text).toBe('first\nsecond\nthird');
+    expect(items().at(-1)!.text).toBe('first\nsecond\nthird');
+  });
+
   it('does not auto-retry a message the server rejected as invalid', async () => {
     const { store, items, sent, replyWith } = setup();
     await store.loadLatest(CONVERSATION);

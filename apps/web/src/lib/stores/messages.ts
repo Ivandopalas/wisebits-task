@@ -65,6 +65,8 @@ const RATE_LIMIT_PAUSE_MS = 1000;
 const RATE_LIMIT_RETRIES = 5;
 /** Messages can overtake each other on the way from different API replicas. */
 export const GAP_WAIT_MS = 1000;
+/** Word's line and page breaks: control characters, which the server refuses in a message. */
+const WORD_BREAKS = /[\v\f]/g;
 
 function confirmed(message: MessageDto): ChatMessage {
   return { ...message, key: message.clientMessageId, status: 'sent' };
@@ -256,7 +258,7 @@ export function createMessagesStore(
         seq: null,
         conversationId,
         senderId,
-        text,
+        text: text.replace(WORD_BREAKS, '\n'),
         clientMessageId,
         createdAt: new Date().toISOString(),
         status: 'sending',
