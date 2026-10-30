@@ -36,8 +36,10 @@ export class MessagesService {
    * the `seq` increment; the transaction helper retries the loser, so seq stays gapless.
    */
   async send(conversationId: string, senderId: string, input: SendInput): Promise<SendResult> {
-    const conversation = await this.conversations.requireParticipant(conversationId, senderId);
-    const previous = await this.findByClientId(senderId, input.clientMessageId);
+    const [conversation, previous] = await Promise.all([
+      this.conversations.requireParticipant(conversationId, senderId),
+      this.findByClientId(senderId, input.clientMessageId),
+    ]);
     if (previous) {
       return this.replay(previous, conversationId);
     }
