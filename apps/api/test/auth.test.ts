@@ -2,6 +2,7 @@ import type { StoryDto, StoryPlaybackDto } from '@chat/shared';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import request from 'supertest';
+import { AuthService } from '../src/auth/auth.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import { cookieValue, readCookies, registerUser, uniqueName } from './helpers/users.js';
 import { fakeWebm } from './helpers/videos.js';
@@ -207,6 +208,16 @@ describe('auth', () => {
           { $set: { expiresAt: new Date(Date.now() - 1000) } },
         );
       await refresh(user.cookies).expect(401);
+    });
+
+    it('keeps the session when the check itself fails', async () => {
+      const user = await registerUser(t.url);
+      vi.spyOn(t.app.get(AuthService), 'refresh').mockRejectedValueOnce(new Error('db is down'));
+
+      const failed = await refresh(user.cookies).expect(500);
+
+      expect(failed.headers['set-cookie']).toBeUndefined();
+      await refresh(user.cookies).expect(200);
     });
 
     it('rejects a missing or unknown token', async () => {

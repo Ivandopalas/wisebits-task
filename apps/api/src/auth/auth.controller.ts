@@ -81,7 +81,10 @@ export class AuthController {
     try {
       return this.respond(res, await this.auth.refresh(token));
     } catch (error) {
-      clearAuthCookies(res, this.config.get('COOKIE_SECURE'));
+      // Only a rejected token ends the session; a failed check says nothing about it.
+      if (error instanceof UnauthorizedException) {
+        clearAuthCookies(res, this.config.get('COOKIE_SECURE'));
+      }
       throw error;
     }
   }
