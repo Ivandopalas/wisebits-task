@@ -63,7 +63,7 @@ export const messagesPageSchema = z
   .meta({ id: 'MessagesPage' });
 export type MessagesPage = z.infer<typeof messagesPageSchema>;
 
-export const lastMessageDtoSchema = messageDtoSchema
+const lastMessageDtoSchema = messageDtoSchema
   .pick({ id: true, seq: true, senderId: true, text: true, createdAt: true })
   .meta({ id: 'LastMessage' });
 
