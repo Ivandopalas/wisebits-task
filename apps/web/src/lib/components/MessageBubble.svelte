@@ -31,7 +31,7 @@
           : 'bg-white text-gray-900',
     ]}
   >
-    <p class="break-words whitespace-pre-wrap">{message.text}</p>
+    <p class="break-words whitespace-pre-wrap" dir="auto">{message.text}</p>
     <p
       class={[
         'mt-0.5 flex items-center justify-end gap-1 text-[11px]',

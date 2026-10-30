@@ -316,6 +316,7 @@
         oninput={onInput}
         onkeydown={onKeydown}
         rows="1"
+        dir="auto"
         maxlength={LIMITS.messageMaxLength}
         placeholder="Write a message…"
         aria-label="Message"
