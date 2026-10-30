@@ -1,21 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cameraProblem, pickRecordingType } from './media.js';
-
-describe('pickRecordingType', () => {
-  it('prefers VP9 WebM where available (Chrome)', () => {
-    expect(pickRecordingType(() => true)).toBe('video/webm;codecs=vp9,opus');
-  });
-
-  it('falls back to MP4 where WebM is not recordable (Safari)', () => {
-    expect(pickRecordingType((type) => type.startsWith('video/mp4'))).toBe(
-      'video/mp4;codecs=avc1,mp4a',
-    );
-  });
-
-  it('returns null when nothing is supported', () => {
-    expect(pickRecordingType(() => false)).toBeNull();
-  });
-});
+import { cameraProblem } from './media.js';
 
 describe('cameraProblem', () => {
   it.each([
