@@ -1,4 +1,5 @@
-import { Logger } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
+import { HealthCheckService } from '@nestjs/terminus';
 import request from 'supertest';
 import { UsersService } from '../src/users/users.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
@@ -33,6 +34,17 @@ describe('health', () => {
 
     await request(t.url).get('/api/health/ready').expect(503);
     expect(ping).toHaveBeenCalled();
+  });
+
+  it('does not report a readiness refusal during shutdown as an unhandled error', async () => {
+    vi.spyOn(t.app.get(HealthCheckService), 'check').mockRejectedValueOnce(
+      new ServiceUnavailableException({ status: 'shutting_down' }),
+    );
+    const logged = vi.spyOn(Logger.prototype, 'error');
+
+    await request(t.url).get('/api/health/ready').expect(503);
+
+    expect(logged).not.toHaveBeenCalled();
   });
 
   it('echoes a valid request id and generates one otherwise', async () => {
