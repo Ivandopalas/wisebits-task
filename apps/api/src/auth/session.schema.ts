@@ -10,7 +10,7 @@ import { Types } from 'mongoose';
 export class Session {
   _id: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: true, index: true })
+  @Prop({ type: Types.ObjectId, required: true })
   userId: Types.ObjectId;
 
   @Prop({ required: true, index: true })
