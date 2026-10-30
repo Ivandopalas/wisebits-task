@@ -18,7 +18,8 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   MONGO_URI: z.string().startsWith('mongodb', 'MONGO_URI must be a mongodb:// connection string'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
-  ACCESS_TOKEN_TTL_SECONDS: seconds.default(900),
+  // A socket closes on a timer when its token expires, and a Node timer holds at most 2^31 ms.
+  ACCESS_TOKEN_TTL_SECONDS: seconds.max(2_147_483).default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   MEDIA_TOKEN_TTL_SECONDS: seconds.default(3600),
   COOKIE_SECURE: z.stringbool().default(true),
