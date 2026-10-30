@@ -12,6 +12,20 @@ const session = (token: string): AuthResponse => ({
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+/** Web Locks in miniature: tasks under one name run one after another, in order. */
+function lockManager() {
+  const tails = new Map<string, Promise<unknown>>();
+  const request = (name: string, task: () => Promise<unknown>) => {
+    const run = (tails.get(name) ?? Promise.resolve()).then(task);
+    tails.set(
+      name,
+      run.catch(() => undefined),
+    );
+    return run;
+  };
+  return { request } as Pick<LockManager, 'request'>;
+}
+
 describe('auth store', () => {
   it('restores the session from the refresh cookie', async () => {
     const fetch = vi.fn(async () => json(200, session('t1')));
@@ -45,14 +59,24 @@ describe('auth store', () => {
     expect(tokens).toEqual(['t1', 't1', 't1']);
   });
 
-  it('runs the refresh under a cross-tab lock', async () => {
-    const request = vi.fn((_name: string, task: () => Promise<unknown>) => task());
-    const auth = createAuthStore({
-      fetch: async () => json(200, session('t1')),
-      locks: { request } as unknown as LockManager,
+  it('queues the refreshes of two tabs, which share one refresh cookie', async () => {
+    let inFlight = 0;
+    let overlapped = false;
+    let calls = 0;
+    const fetch = vi.fn(async () => {
+      overlapped ||= inFlight > 0;
+      inFlight += 1;
+      await new Promise((resolve) => setTimeout(resolve));
+      inFlight -= 1;
+      return json(200, session(`t${++calls}`));
     });
-    await auth.refresh();
-    expect(request).toHaveBeenCalledWith('chat:auth-refresh', expect.any(Function));
+    const locks = lockManager();
+    const tabs = [createAuthStore({ fetch, locks }), createAuthStore({ fetch, locks })];
+
+    const tokens = await Promise.all(tabs.map((tab) => tab.refresh()));
+
+    expect(overlapped).toBe(false);
+    expect(tokens).toEqual(['t1', 't2']);
   });
 
   it('refreshes only when the access token is about to expire', async () => {
