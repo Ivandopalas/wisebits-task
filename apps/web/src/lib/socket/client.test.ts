@@ -54,7 +54,8 @@ vi.mock('socket.io-client', () => ({
   },
 }));
 
-const { closeSocket, connection, openSocket, request } = await import('./client.js');
+const { closeSocket, connection, openSocket, OUTAGE_GRACE_MS, request } =
+  await import('./client.js');
 
 function setup() {
   const options = {
@@ -62,7 +63,7 @@ function setup() {
     refresh: vi.fn<() => Promise<string | null>>(async () => 'new-token'),
     onUnauthorized: vi.fn(),
     onConnect: vi.fn(),
-    onDisconnect: vi.fn(),
+    onConnectionLost: vi.fn(),
   };
   openSocket(options);
   return { options, socket: sockets.created.at(-1) as FakeSocket };
@@ -122,10 +123,39 @@ describe('chat socket', () => {
   it('leaves a network error to the retries of socket.io', async () => {
     const { options, socket } = setup();
     socket.fire('connect_error', new Error('websocket error'));
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS);
 
     expect(get(connection)).toBe('offline');
     expect(options.refresh).not.toHaveBeenCalled();
+  });
+
+  describe('when the connection drops', () => {
+    it('keeps quiet about a routine reconnect, like the one after a token expires', async () => {
+      const { options, socket } = setup();
+      socket.open();
+
+      socket.connected = false;
+      socket.fire('disconnect', 'io server disconnect');
+      await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS - 1);
+      expect(get(connection)).toBe('online');
+      socket.open();
+      await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS);
+
+      expect(get(connection)).toBe('online');
+      expect(options.onConnectionLost).not.toHaveBeenCalled();
+    });
+
+    it('reports it once the reconnect takes longer than that', async () => {
+      const { options, socket } = setup();
+      socket.open();
+
+      socket.connected = false;
+      socket.fire('disconnect', 'transport close');
+      await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS);
+
+      expect(get(connection)).toBe('offline');
+      expect(options.onConnectionLost).toHaveBeenCalledOnce();
+    });
   });
 
   describe('when the browser reports the network gone', () => {
@@ -134,22 +164,24 @@ describe('chat socket', () => {
       window.dispatchEvent(new Event('offline'));
     }
 
-    it('drops the connection at once instead of waiting for the ping timeout', () => {
+    it('drops the connection at once instead of waiting for the ping timeout', async () => {
       const { options, socket } = setup();
       socket.open();
 
       goOffline();
-
       expect(socket.connected).toBe(false);
+      await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS);
+
       expect(get(connection)).toBe('offline');
-      expect(options.onDisconnect).toHaveBeenCalledOnce();
+      expect(options.onConnectionLost).toHaveBeenCalledOnce();
     });
 
-    it('reports it while a connection attempt is still under way, too', () => {
+    it('reports it while a connection attempt is still under way, too', async () => {
       setup();
       expect(get(connection)).toBe('connecting');
 
       goOffline();
+      await vi.advanceTimersByTimeAsync(OUTAGE_GRACE_MS);
 
       expect(get(connection)).toBe('offline');
     });
@@ -205,6 +237,5 @@ describe('chat socket', () => {
     socket.open();
 
     expect(options.onConnect.mock.calls).toEqual([[false], [true]]);
-    expect(options.onDisconnect).toHaveBeenCalledOnce();
   });
 });

@@ -13,6 +13,8 @@ export type ConnectionStatus = 'idle' | 'connecting' | 'online' | 'offline';
 export const connection = writable<ConnectionStatus>('idle');
 
 const ACK_TIMEOUT_MS = 10_000;
+/** The socket is closed on every token expiry; a reconnect within this time goes unnoticed. */
+export const OUTAGE_GRACE_MS = 1500;
 
 let socket: ChatSocket | null = null;
 let detachListeners: (() => void) | null = null;
@@ -24,7 +26,8 @@ export interface SocketOptions {
   onUnauthorized(): void;
   /** Fired on every successful (re)connection; `resumed` is false for the first one. */
   onConnect(resumed: boolean): void;
-  onDisconnect(): void;
+  /** The connection has been gone for longer than `OUTAGE_GRACE_MS`. */
+  onConnectionLost(): void;
 }
 
 /**
@@ -53,11 +56,20 @@ export function openSocket(options: SocketOptions): ChatSocket {
   socket = instance;
   connection.set('connecting');
 
+  let outageTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const reportOutageSoon = () => {
+    outageTimer ??= setTimeout(() => {
+      connection.set('offline');
+      options.onConnectionLost();
+    }, OUTAGE_GRACE_MS);
+  };
+
   // The browser knows the network is gone: close now rather than notice by the ping timeout,
   // 45 s later, and leave the retries until it is back.
   const dropConnection = () => {
     instance.disconnect();
-    connection.set('offline');
+    reportOutageSoon();
   };
   const reconnectNow = () => {
     if (!instance.connected) {
@@ -74,20 +86,22 @@ export function openSocket(options: SocketOptions): ChatSocket {
   window.addEventListener('online', reconnectNow);
   document.addEventListener('visibilitychange', onVisibilityChange);
   detachListeners = () => {
+    clearTimeout(outageTimer);
     window.removeEventListener('offline', dropConnection);
     window.removeEventListener('online', reconnectNow);
     document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 
   instance.on('connect', () => {
+    clearTimeout(outageTimer);
+    outageTimer = undefined;
     connection.set('online');
     options.onConnect(connectedBefore);
     connectedBefore = true;
   });
 
   instance.on('disconnect', (reason) => {
-    connection.set('offline');
-    options.onDisconnect();
+    reportOutageSoon();
     // The server closing the socket is not retried automatically.
     if (reason === 'io server disconnect') {
       instance.connect();
@@ -95,7 +109,7 @@ export function openSocket(options: SocketOptions): ChatSocket {
   });
 
   instance.on('connect_error', (error: Error & { data?: { code?: SocketErrorCode } }) => {
-    connection.set('offline');
+    reportOutageSoon();
     if (instance.active) {
       return; // a network problem: socket.io keeps retrying on its own
     }

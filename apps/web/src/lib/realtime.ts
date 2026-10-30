@@ -20,7 +20,7 @@ export function startRealtime(): void {
     refresh: auth.refresh,
     onUnauthorized: () => void auth.logout(),
     // Nobody tells us who came and went while we are away.
-    onDisconnect: () => presence.reset(),
+    onConnectionLost: () => presence.reset(),
     onConnect: (resumed) => {
       void syncPresence();
       if (resumed) {

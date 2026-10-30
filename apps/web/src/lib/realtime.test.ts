@@ -89,7 +89,7 @@ describe('realtime', () => {
     startRealtime();
     presence.set(peer.id, true);
 
-    socket.open.mock.lastCall![0].onDisconnect();
+    socket.open.mock.lastCall![0].onConnectionLost();
 
     expect(get(presence)).toEqual({});
   });
