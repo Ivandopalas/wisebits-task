@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { stripToken } from '../logging.module.js';
 import { toApiError } from './to-api-error.js';
 
 @Catch()
@@ -23,7 +24,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // A 503 is a refusal, not a failure: readiness answers it on every shutdown.
     if (error.statusCode >= 500 && !(exception instanceof ServiceUnavailableException)) {
-      this.logger.error({ err: exception, path: request.originalUrl }, 'Unhandled error');
+      this.logger.error(
+        { err: exception, path: stripToken(request.originalUrl) },
+        'Unhandled error',
+      );
     }
     if (response.headersSent) {
       response.end();

@@ -1,6 +1,7 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { HealthCheckService } from '@nestjs/terminus';
 import request from 'supertest';
+import { TokensService } from '../src/auth/tokens.service.js';
 import { UsersService } from '../src/users/users.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import { registerUser } from './helpers/users.js';
@@ -92,5 +93,16 @@ describe('health', () => {
       expect.objectContaining({ err: failure }),
       'Unhandled error',
     );
+  });
+
+  it('keeps the signed video token out of the error log', async () => {
+    vi.spyOn(t.app.get(TokensService), 'verifyMedia').mockRejectedValueOnce(new Error('boom'));
+    const logged = vi.spyOn(Logger.prototype, 'error');
+
+    await request(t.url)
+      .get(`/api/stories/${'0'.repeat(24)}/video?token=s3cret`)
+      .expect(500);
+
+    expect(JSON.stringify(logged.mock.calls)).not.toContain('s3cret');
   });
 });
