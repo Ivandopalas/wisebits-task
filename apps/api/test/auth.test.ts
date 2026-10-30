@@ -1,7 +1,10 @@
+import type { StoryDto } from '@chat/shared';
+import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import request from 'supertest';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import { cookieValue, readCookies, registerUser, uniqueName } from './helpers/users.js';
+import { fakeWebm } from './helpers/videos.js';
 
 describe('auth', () => {
   let t: TestApp;
@@ -126,6 +129,32 @@ describe('auth', () => {
       const me = await request(t.url).get('/api/auth/me').set(user.auth).expect(200);
       expect(me.body).toEqual(user.user);
     });
+
+    it('keeps access tokens and story media tokens apart', async () => {
+      const user = await registerUser(t.url);
+      const story = (
+        await request(t.url)
+          .post('/api/stories')
+          .set(user.auth)
+          .field('durationMs', '5000')
+          .attach('video', fakeWebm(), { filename: 'a.webm', contentType: 'video/webm' })
+          .expect(201)
+      ).body as StoryDto;
+
+      const mediaToken = new URL(story.videoUrl, t.url).searchParams.get('token')!;
+      await request(t.url)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${mediaToken}`)
+        .expect(401);
+
+      const accessToken = t.app
+        .get(JwtService)
+        .sign({ story: story.id }, { subject: user.user.id, audience: 'access', expiresIn: 60 });
+      await request(t.url)
+        .get(`/api/stories/${story.id}/video`)
+        .query({ token: accessToken })
+        .expect(401);
+    });
   });
 
   describe('refresh', () => {
@@ -164,6 +193,17 @@ describe('auth', () => {
       const replay = await refresh(user.cookies).expect(401);
       expect(readCookies(replay.headers['set-cookie'])).toContain('rt=');
       await refresh(current).expect(401);
+    });
+
+    it('rejects an expired token', async () => {
+      const user = await registerUser(t.url);
+      await t.connection
+        .collection('sessions')
+        .updateOne(
+          { userId: new Types.ObjectId(user.user.id) },
+          { $set: { expiresAt: new Date(Date.now() - 1000) } },
+        );
+      await refresh(user.cookies).expect(401);
     });
 
     it('rejects a missing or unknown token', async () => {

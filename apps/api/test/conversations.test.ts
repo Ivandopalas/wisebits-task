@@ -22,6 +22,19 @@ describe('conversations', () => {
   const list = (user: TestUser, query: Record<string, string | number> = {}) =>
     request(t.url).get('/api/conversations').query(query).set(user.auth);
 
+  async function listByPages(user: TestUser): Promise<string[]> {
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: Page<ConversationDto> = (
+        await list(user, { limit: 2, ...(cursor && { cursor }) }).expect(200)
+      ).body;
+      seen.push(...page.items.map((c) => c.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    return seen;
+  }
+
   const send = (user: TestUser, conversationId: string, text: string) =>
     request(t.url)
       .post(`/api/conversations/${conversationId}/messages`)
@@ -107,17 +120,24 @@ describe('conversations', () => {
     // A message lifts the oldest conversation to the top.
     await send(peers[0]!, ids[0]!, 'bump');
 
-    const expected = [ids[0], ids[4], ids[3], ids[2], ids[1]];
-    const seen: string[] = [];
-    let cursor: string | null = null;
-    do {
-      const page: Page<ConversationDto> = (
-        await list(me, { limit: 2, ...(cursor && { cursor }) }).expect(200)
-      ).body;
-      seen.push(...page.items.map((c) => c.id));
-      cursor = page.nextCursor;
-    } while (cursor);
-    expect(seen).toEqual(expected);
+    expect(await listByPages(me)).toEqual([ids[0], ids[4], ids[3], ids[2], ids[1]]);
+  });
+
+  it('pages through conversations with the same activity time, newest id first', async () => {
+    const me = await registerUser(t.url);
+    const peers = await Promise.all(Array.from({ length: 5 }, () => registerUser(t.url)));
+    const ids: string[] = [];
+    for (const peer of peers) {
+      ids.push(((await open(me, peer).expect(201)).body as ConversationDto).id);
+    }
+    await t.connection
+      .collection('conversations')
+      .updateMany(
+        { _id: { $in: ids.map((id) => new Types.ObjectId(id)) } },
+        { $set: { lastActivityAt: new Date('2026-01-01T00:00:00Z') } },
+      );
+
+    expect(await listByPages(me)).toEqual(ids.toSorted().reverse());
   });
 
   it('lets only participants read a conversation', async () => {

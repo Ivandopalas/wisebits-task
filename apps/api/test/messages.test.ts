@@ -186,6 +186,16 @@ describe('messages', () => {
       expect((await conversationOf(bob, conversationId)).unreadCount).toBe(0);
     });
 
+    it('rejects unknown fields', async () => {
+      const { alice, bob, conversationId } = await pair();
+      await send(alice, conversationId, 'hello').expect(201);
+      await request(t.url)
+        .post(`/api/conversations/${conversationId}/read`)
+        .set(bob.auth)
+        .send({ seq: 1, userId: alice.user.id })
+        .expect(400);
+    });
+
     it('treats a reply as having read the conversation', async () => {
       const { alice, bob, conversationId } = await pair();
       await send(alice, conversationId, 'question').expect(201);
