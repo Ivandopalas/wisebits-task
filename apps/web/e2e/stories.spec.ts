@@ -1,5 +1,26 @@
 import { expect, test } from '@playwright/test';
-import { signedInUser } from './helpers.js';
+import { contrastRatio, signedInUser, type Person } from './helpers.js';
+
+/** A WebM signature with nothing playable behind it: the story never ends and moves on. */
+const UNPLAYABLE_VIDEO = Buffer.from([
+  0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01, 0x42, 0xf7, 0x81, 0x01, 0x42, 0xf2, 0x81,
+  0x04, 0x42, 0xf3, 0x81, 0x08, 0x42, 0x82, 0x84, 0x77, 0x65, 0x62, 0x6d, 0x42, 0x87, 0x81, 0x04,
+  0x42, 0x85, 0x81, 0x02,
+]);
+
+async function publishStory(author: Person) {
+  const { accessToken } = (await (
+    await author.context.request.post('/api/auth/refresh')
+  ).json()) as { accessToken: string };
+  const response = await author.context.request.post('/api/stories', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    multipart: {
+      durationMs: '5000',
+      video: { name: 'story.webm', mimeType: 'video/webm', buffer: UNPLAYABLE_VIDEO },
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+}
 
 test('a story is recorded from the camera, stops itself at 15 s and reaches others live', async ({
   browser,
@@ -7,6 +28,10 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   test.setTimeout(120_000);
   const author = await signedInUser(browser);
   const viewer = await signedInUser(browser);
+  const feedRequests: string[] = [];
+  viewer.page.on('request', (request) => {
+    if (request.url().endsWith('/api/stories/feed')) feedRequests.push(request.url());
+  });
 
   await author.page.getByTestId('new-story').click();
   const recorder = author.page.getByTestId('recorder');
@@ -14,7 +39,7 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
 
   await author.page.getByRole('button', { name: 'Record' }).click();
   await expect(author.page.getByTestId('countdown')).toBeVisible();
-  await expect(author.page.getByTestId('recording-timer')).toBeVisible({ timeout: 5_000 });
+  await expect(author.page.getByTestId('recording-timer')).toBeVisible();
 
   // Nobody presses Stop: the recorder must end on its own at the 15 second limit.
   const startedAt = Date.now();
@@ -33,9 +58,10 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
   await author.page.getByRole('button', { name: 'Share story' }).click();
   await expect(author.page).toHaveURL(/\/chats$/);
 
-  // The viewer's feed updates over the socket.
+  // The story arrives in the event itself: nobody online goes back to the server for the feed.
   const ring = viewer.page.getByTestId('story-author').filter({ hasText: author.username });
   await expect(ring).toHaveAttribute('data-unseen', 'true');
+  expect(feedRequests).toEqual([]);
 
   await ring.click();
   const player = viewer.page.getByTestId('story-viewer');
@@ -69,6 +95,50 @@ test('a story is recorded from the camera, stops itself at 15 s and reaches othe
 
   await author.context.close();
   await viewer.context.close();
+});
+
+test('the story viewer takes the keyboard and gives it back', async ({ browser }) => {
+  const author = await signedInUser(browser);
+  const viewer = await signedInUser(browser);
+  await publishStory(author);
+
+  const ring = viewer.page.getByTestId('story-author').filter({ hasText: author.username });
+  await ring.focus();
+  await viewer.page.keyboard.press('Enter');
+  const player = viewer.page.getByTestId('story-viewer');
+  await expect(player).toBeFocused();
+  await expect(player.getByTestId('story-video')).toBeAttached();
+
+  await viewer.page.keyboard.press('Space');
+  await expect(player.getByRole('button', { name: 'Play' })).toBeVisible();
+
+  // On a button Space belongs to the button: this one closes the viewer, it does not resume.
+  await player.getByRole('button', { name: 'Close' }).focus();
+  await viewer.page.keyboard.press('Space');
+  await expect(player).toBeHidden();
+  await expect(ring).toBeFocused();
+
+  await author.context.close();
+  await viewer.context.close();
+});
+
+test('an empty stories bar is readable and has one tab stop to the recorder', async ({
+  browser,
+}) => {
+  const user = await signedInUser(browser);
+  await user.page.route('**/api/stories/feed', (route) => route.fulfill({ json: [] }));
+  await user.page.reload();
+
+  const bar = user.page.getByTestId('stories-bar');
+  expect(await contrastRatio(bar.getByText('No stories from others yet'))).toBeGreaterThan(4.5);
+
+  await user.page.getByRole('button', { name: 'Sign out' }).focus();
+  await user.page.keyboard.press('Tab');
+  await expect(bar.getByTestId('new-story')).toBeFocused();
+  await user.page.keyboard.press('Tab');
+  await expect(user.page.getByRole('link', { name: 'Chats', exact: true })).toBeFocused();
+
+  await user.context.close();
 });
 
 test('leaving while the camera is still starting turns it off', async ({ browser }) => {

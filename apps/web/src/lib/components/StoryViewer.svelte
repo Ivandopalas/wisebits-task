@@ -27,6 +27,7 @@
   let error = $state<string | null>(null);
   let confirmingDelete = $state(false);
   let videoUrl = $state<string | null>(null);
+  let dialog = $state<HTMLDialogElement>();
   let video = $state<HTMLVideoElement>();
 
   const item = $derived(feed[authorIndex]);
@@ -35,6 +36,13 @@
 
   $effect(() => {
     if (!story) onclose();
+  });
+
+  // A modal dialog keeps Tab inside, closes on Escape and hands focus back to whatever opened it.
+  $effect(() => {
+    dialog?.showModal();
+    // Rather than on its first button: Space has to pause, not go to the previous story.
+    dialog?.focus();
   });
 
   $effect(() => {
@@ -81,7 +89,7 @@
     if (!item) return;
     if (storyIndex < item.stories.length - 1) go(authorIndex, storyIndex + 1);
     else if (authorIndex < feed.length - 1) go(authorIndex + 1, firstUnseen(feed[authorIndex + 1]));
-    else onclose();
+    else dialog?.close();
   }
 
   function previous() {
@@ -126,17 +134,17 @@
     if (!story) return;
     try {
       await stories.deleteOwn(story.id);
-      onclose();
+      dialog?.close();
     } catch (e) {
       error = errorMessage(e);
     }
   }
 
   function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') onclose();
-    else if (event.key === 'ArrowRight') next();
+    if (event.key === 'ArrowRight') next();
     else if (event.key === 'ArrowLeft') previous();
-    else if (event.key === ' ') {
+    // On a button Space is that button's own key.
+    else if (event.key === ' ' && !(event.target instanceof HTMLButtonElement)) {
       event.preventDefault();
       togglePause();
     }
@@ -146,10 +154,11 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if item && story}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 sm:p-6"
-    role="dialog"
-    aria-modal="true"
+  <dialog
+    bind:this={dialog}
+    {onclose}
+    class="size-full max-h-none max-w-none items-center justify-center bg-black/90 outline-none open:flex sm:p-6"
+    tabindex="-1"
     aria-label="Stories of {item.author.username}"
     data-testid="story-viewer"
   >
@@ -240,7 +249,7 @@
           type="button"
           class="rounded-full p-2 text-white hover:bg-white/10"
           aria-label="Close"
-          onclick={onclose}
+          onclick={() => dialog?.close()}
         >
           <svg class="size-5" viewBox="0 0 20 20" fill="currentColor"
             ><path
@@ -293,5 +302,5 @@
         </p>
       {/if}
     </div>
-  </div>
+  </dialog>
 {/if}
