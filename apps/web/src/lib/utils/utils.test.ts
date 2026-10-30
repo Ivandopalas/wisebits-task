@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysBetween, formatDayLabel, groupByDay } from './format.js';
+import { daysBetween, formatDayLabel, formatListTime, formatTime, groupByDay } from './format.js';
 import { safeNext } from './redirect.js';
 import { uuid } from './uuid.js';
 
@@ -23,6 +23,18 @@ describe('formatDayLabel', () => {
 
   it('counts calendar days, not 24-hour periods', () => {
     expect(daysBetween(new Date(2026, 9, 27, 23, 59), new Date(2026, 9, 28, 0, 1))).toBe(1);
+  });
+});
+
+describe('date formats', () => {
+  const now = new Date(2026, 9, 28, 15);
+
+  it('stay in the language of the interface whatever the browser is set to', () => {
+    expect(formatTime(new Date(2026, 9, 28, 14, 5).toISOString())).toBe('14:05');
+    expect(formatListTime(new Date(2026, 9, 26, 9).toISOString(), now)).toBe('Mon');
+    expect(formatListTime(new Date(2026, 7, 3, 9).toISOString(), now)).toBe('3 Aug');
+    expect(formatDayLabel(new Date(2026, 9, 21, 9).toISOString(), now)).toContain('October');
+    expect(formatDayLabel(new Date(2025, 9, 21, 9).toISOString(), now)).toBe('21 October 2025');
   });
 });
 

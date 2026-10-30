@@ -1,12 +1,16 @@
-const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
-const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
-const shortDate = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
-const longDate = new Intl.DateTimeFormat(undefined, {
+// The interface is in English, so dates are too: left to the browser's language, a Russian
+// browser mixes a Russian weekday into the list. British English keeps the 24-hour clock.
+const LOCALE = 'en-GB';
+
+const time = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' });
+const weekday = new Intl.DateTimeFormat(LOCALE, { weekday: 'short' });
+const shortDate = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' });
+const longDate = new Intl.DateTimeFormat(LOCALE, {
   weekday: 'long',
   day: 'numeric',
   month: 'long',
 });
-const fullDate = new Intl.DateTimeFormat(undefined, {
+const fullDate = new Intl.DateTimeFormat(LOCALE, {
   day: 'numeric',
   month: 'long',
   year: 'numeric',
