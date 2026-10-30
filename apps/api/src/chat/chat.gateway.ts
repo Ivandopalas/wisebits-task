@@ -78,10 +78,12 @@ export class ChatGateway
   afterInit(server: ChatServer) {
     this.realtime.attach(server);
     server.use((socket, next) => {
-      this.authenticate(socket).then(
-        () => next(),
-        (code: SocketErrorCode) => next(Object.assign(new Error(code), { data: { code } })),
-      );
+      this.authenticate(socket)
+        .catch((err: unknown) => {
+          this.logger.error({ err }, 'Socket handshake failed');
+          return SOCKET_ERROR.unavailable;
+        })
+        .then((code) => next(code && Object.assign(new Error(code), { data: { code } })));
     });
   }
 
@@ -188,16 +190,17 @@ export class ChatGateway
     };
   }
 
-  private async authenticate(socket: ChatSocket): Promise<void> {
+  /** Fills in `socket.data`, or returns why the socket is refused. */
+  private async authenticate(socket: ChatSocket): Promise<SocketErrorCode | undefined> {
     const token: unknown = socket.handshake.auth?.token;
     if (typeof token !== 'string' || token.length === 0) {
-      throw SOCKET_ERROR.unauthorized;
+      return SOCKET_ERROR.unauthorized;
     }
     let claims;
     try {
       claims = await this.tokens.verifyAccess(token);
     } catch (error) {
-      throw error instanceof TokenExpiredException
+      return error instanceof TokenExpiredException
         ? SOCKET_ERROR.tokenExpired
         : SOCKET_ERROR.unauthorized;
     }
@@ -207,7 +210,7 @@ export class ChatGateway
       this.sessions.isActive(claims.sessionId),
     ]);
     if (!userExists || !sessionActive) {
-      throw SOCKET_ERROR.unauthorized;
+      return SOCKET_ERROR.unauthorized;
     }
     socket.data = {
       userId: claims.id,
@@ -215,6 +218,7 @@ export class ChatGateway
       sessionId: claims.sessionId,
       tokenExpiresAt: claims.expiresAt,
     };
+    return undefined;
   }
 
   private async broadcastPresence(userId: string, online: boolean) {

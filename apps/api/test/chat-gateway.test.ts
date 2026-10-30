@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
+import { UsersService } from '../src/users/users.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
 import {
   connect,
@@ -78,6 +79,17 @@ describe('chat gateway', () => {
       const user = await registerUser(t.url);
       await t.connection.collection('users').deleteOne({ _id: new Types.ObjectId(user.user.id) });
       expect(await connectError(t.url, user.accessToken)).toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('says only "try again" when the check itself fails', async () => {
+      const user = await registerUser(t.url);
+      vi.spyOn(t.app.get(UsersService), 'exists').mockRejectedValueOnce(
+        new Error('connect ECONNREFUSED mongo:27017'),
+      );
+      expect(await connectError(t.url, user.accessToken)).toEqual({
+        message: 'UNAVAILABLE',
+        code: 'UNAVAILABLE',
+      });
     });
   });
 

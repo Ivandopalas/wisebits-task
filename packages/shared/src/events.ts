@@ -13,6 +13,8 @@ export type Ack<T> = (response: AckResponse<T>) => void;
 export const SOCKET_ERROR = {
   tokenExpired: 'TOKEN_EXPIRED',
   unauthorized: 'UNAUTHORIZED',
+  /** The check itself failed, nothing is wrong with the token: try again in a moment. */
+  unavailable: 'UNAVAILABLE',
 } as const;
 export type SocketErrorCode = (typeof SOCKET_ERROR)[keyof typeof SOCKET_ERROR];
 
