@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Model, Types } from 'mongoose';
 import { AppConfig } from '../config/config.service.js';
+import { RealtimeService } from '../realtime/realtime.service.js';
 import { Session } from './session.schema.js';
 
 /**
@@ -13,6 +14,7 @@ export const REUSE_GRACE_MS = 10_000;
 
 export interface IssuedRefreshToken {
   token: string;
+  familyId: string;
   expiresAt: Date;
 }
 
@@ -25,6 +27,7 @@ export class SessionsService {
   constructor(
     @InjectModel(Session.name) private readonly sessions: Model<Session>,
     private readonly config: AppConfig,
+    private readonly realtime: RealtimeService,
   ) {}
 
   start(userId: Types.ObjectId): Promise<IssuedRefreshToken> {
@@ -79,11 +82,16 @@ export class SessionsService {
     }
   }
 
+  /** False once the user signed out of the session or it was revoked after a reuse. */
+  async isActive(familyId: string): Promise<boolean> {
+    return (await this.sessions.exists({ familyId, revokedAt: null })) !== null;
+  }
+
   private async issue(userId: Types.ObjectId, familyId: string): Promise<IssuedRefreshToken> {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + this.config.get('REFRESH_TOKEN_TTL_DAYS') * 86_400_000);
     await this.sessions.create({ userId, familyId, tokenHash: hashToken(token), expiresAt });
-    return { token, expiresAt };
+    return { token, familyId, expiresAt };
   }
 
   private async revokeFamily(familyId: string): Promise<void> {
@@ -91,6 +99,7 @@ export class SessionsService {
       { familyId, revokedAt: null },
       { $set: { revokedAt: new Date() } },
     );
+    this.realtime.disconnectSession(familyId);
   }
 }
 

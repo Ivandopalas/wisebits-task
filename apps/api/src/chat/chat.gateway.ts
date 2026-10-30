@@ -30,12 +30,14 @@ import {
   type WsTypingPayload,
 } from '@chat/shared';
 import type { Socket } from 'socket.io';
+import { SessionsService } from '../auth/sessions.service.js';
 import { TokenExpiredException, TokensService } from '../auth/tokens.service.js';
 import { createValidationPipe } from '../common/validation.js';
 import { ConversationsService } from '../conversations/conversations.service.js';
 import { MessagesService } from '../messages/messages.service.js';
 import {
   RealtimeService,
+  sessionRoom,
   userRoom,
   type ChatServer,
   type SocketData,
@@ -60,11 +62,13 @@ export class ChatGateway
   private readonly logger = new Logger(ChatGateway.name);
   private readonly limiter = new SocketRateLimiter();
   private readonly offlineTimers = new Set<NodeJS.Timeout>();
+  private readonly expiryTimers = new Map<string, NodeJS.Timeout>();
   private readonly sendQueues = new Map<string, Promise<void>>();
   private closing = false;
 
   constructor(
     private readonly tokens: TokensService,
+    private readonly sessions: SessionsService,
     private readonly users: UsersService,
     private readonly conversations: ConversationsService,
     private readonly messages: MessagesService,
@@ -83,14 +87,20 @@ export class ChatGateway
 
   // Every log line carries the instance id, so these show which replica holds whom.
   async handleConnection(socket: ChatSocket) {
-    const { userId } = socket.data;
+    const { userId, sessionId, tokenExpiresAt } = socket.data;
     this.logger.log({ userId, socketId: socket.id }, 'Socket connected');
-    await socket.join(userRoom(userId));
+    // The token is only read at the handshake, and pings would keep the connection up forever.
+    // The client comes back with a fresh token; a stolen one stops working when it expires.
+    const expiry = setTimeout(() => socket.disconnect(true), tokenExpiresAt - Date.now());
+    this.expiryTimers.set(socket.id, expiry);
+    await socket.join([userRoom(userId), sessionRoom(sessionId)]);
     await this.broadcastPresence(userId, true);
   }
 
   handleDisconnect(socket: ChatSocket) {
     this.limiter.forget(socket.id);
+    clearTimeout(this.expiryTimers.get(socket.id));
+    this.expiryTimers.delete(socket.id);
     const { userId } = socket.data;
     if (!userId) {
       return;
@@ -114,6 +124,8 @@ export class ChatGateway
     this.closing = true;
     this.offlineTimers.forEach(clearTimeout);
     this.offlineTimers.clear();
+    this.expiryTimers.forEach(clearTimeout);
+    this.expiryTimers.clear();
   }
 
   @SubscribeMessage('message:send')
@@ -181,18 +193,28 @@ export class ChatGateway
     if (typeof token !== 'string' || token.length === 0) {
       throw SOCKET_ERROR.unauthorized;
     }
-    let user;
+    let claims;
     try {
-      user = await this.tokens.verifyAccess(token);
+      claims = await this.tokens.verifyAccess(token);
     } catch (error) {
       throw error instanceof TokenExpiredException
         ? SOCKET_ERROR.tokenExpired
         : SOCKET_ERROR.unauthorized;
     }
-    if (!(await this.users.exists(user.id))) {
+    // The token outlives a logout; without this it would reopen the socket that logout closed.
+    const [userExists, sessionActive] = await Promise.all([
+      this.users.exists(claims.id),
+      this.sessions.isActive(claims.sessionId),
+    ]);
+    if (!userExists || !sessionActive) {
       throw SOCKET_ERROR.unauthorized;
     }
-    socket.data = { userId: user.id, username: user.username };
+    socket.data = {
+      userId: claims.id,
+      username: claims.username,
+      sessionId: claims.sessionId,
+      tokenExpiresAt: claims.expiresAt,
+    };
   }
 
   private async broadcastPresence(userId: string, online: boolean) {

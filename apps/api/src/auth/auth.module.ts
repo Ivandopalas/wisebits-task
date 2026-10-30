@@ -46,6 +46,6 @@ const TOO_MANY_ATTEMPTS = 'Too many attempts. Wait a minute and try again.';
     TokensService,
     { provide: APP_GUARD, useClass: AccessTokenGuard },
   ],
-  exports: [TokensService],
+  exports: [SessionsService, TokensService],
 })
 export class AuthModule {}

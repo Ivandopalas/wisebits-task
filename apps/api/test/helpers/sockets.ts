@@ -63,6 +63,20 @@ export function nextEvent<E extends keyof ServerToClientEvents>(
   });
 }
 
+/** Resolves with the reason the socket closes for, or rejects after `timeoutMs`. */
+export function nextDisconnect(socket: ClientSocket, timeoutMs = 3000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Timed out waiting for "disconnect"')),
+      timeoutMs,
+    );
+    socket.once('disconnect', (reason) => {
+      clearTimeout(timer);
+      resolve(reason);
+    });
+  });
+}
+
 /** Resolves true if no matching event arrives within the window. */
 export function noEvent<E extends keyof ServerToClientEvents>(
   socket: ClientSocket,

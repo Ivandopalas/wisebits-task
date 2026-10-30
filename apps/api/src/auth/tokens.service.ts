@@ -6,6 +6,14 @@ import type { AuthUser } from './current-user.decorator.js';
 const ACCESS_AUDIENCE = 'access';
 const MEDIA_AUDIENCE = 'story-media';
 
+/** What a verified access token says, for those who hold on to it past one request. */
+export interface AccessClaims extends AuthUser {
+  /** The refresh token family it was issued from: one sign-in on one device. */
+  sessionId: string;
+  /** Milliseconds since the epoch. */
+  expiresAt: number;
+}
+
 export class TokenExpiredException extends UnauthorizedException {
   constructor() {
     super({ message: 'Access token expired', details: { code: 'TOKEN_EXPIRED' } });
@@ -27,16 +35,26 @@ export class TokensService {
     return this.config.get('ACCESS_TOKEN_TTL_SECONDS');
   }
 
-  signAccess(user: AuthUser): Promise<string> {
+  signAccess(user: AuthUser, sessionId: string): Promise<string> {
     return this.jwt.signAsync(
-      { username: user.username },
+      { username: user.username, sid: sessionId },
       { subject: user.id, audience: ACCESS_AUDIENCE, expiresIn: this.accessTokenTtl },
     );
   }
 
-  async verifyAccess(token: string): Promise<AuthUser> {
-    const payload = await this.verify<{ sub: string; username: string }>(token, ACCESS_AUDIENCE);
-    return { id: payload.sub, username: payload.username };
+  async verifyAccess(token: string): Promise<AccessClaims> {
+    const payload = await this.verify<{
+      sub: string;
+      username: string;
+      sid: string;
+      exp: number;
+    }>(token, ACCESS_AUDIENCE);
+    return {
+      id: payload.sub,
+      username: payload.username,
+      sessionId: payload.sid,
+      expiresAt: payload.exp * 1000,
+    };
   }
 
   /** Grants one user access to one story video until the earlier of the TTL and story expiry. */

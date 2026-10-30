@@ -1,4 +1,10 @@
-import type { AckResponse, ConversationDto, MessageDto, MessagesPage } from '@chat/shared';
+import type {
+  AckResponse,
+  AuthResponse,
+  ConversationDto,
+  MessageDto,
+  MessagesPage,
+} from '@chat/shared';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +14,7 @@ import {
   connect,
   connectError,
   disconnectAll,
+  nextDisconnect,
   nextEvent,
   noEvent,
   type ClientSocket,
@@ -71,6 +78,62 @@ describe('chat gateway', () => {
       const user = await registerUser(t.url);
       await t.connection.collection('users').deleteOne({ _id: new Types.ObjectId(user.user.id) });
       expect(await connectError(t.url, user.accessToken)).toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+  });
+
+  describe('end of a session', () => {
+    const SERVER_CLOSED = 'io server disconnect';
+
+    const logout = (user: TestUser) =>
+      request(t.url).post('/api/auth/logout').set('Cookie', user.cookies).expect(204);
+
+    it('closes the sockets of that session on logout, not those of another device', async () => {
+      const alice = await registerUser(t.url);
+      const otherDevice = await request(t.url)
+        .post('/api/auth/login')
+        .send({ email: alice.user.email, password: alice.password })
+        .expect(200);
+      const [tab1, tab2, phone] = await Promise.all([
+        join(alice),
+        join(alice),
+        connect(t.url, (otherDevice.body as AuthResponse).accessToken),
+      ]);
+
+      const closed = Promise.all([nextDisconnect(tab1), nextDisconnect(tab2)]);
+      await logout(alice);
+
+      expect(await closed).toEqual([SERVER_CLOSED, SERVER_CLOSED]);
+      expect(phone.connected).toBe(true);
+    });
+
+    it('does not let the access token of an ended session reopen a socket', async () => {
+      const alice = await registerUser(t.url);
+      await logout(alice);
+      expect(await connectError(t.url, alice.accessToken)).toMatchObject({ code: 'UNAUTHORIZED' });
+    });
+
+    it('closes the sockets of a session when its refresh token is reused', async () => {
+      const alice = await registerUser(t.url);
+      const refreshed = await request(t.url)
+        .post('/api/auth/refresh')
+        .set('Cookie', alice.cookies)
+        .expect(200);
+      const [before, after] = await Promise.all([
+        join(alice),
+        connect(t.url, (refreshed.body as AuthResponse).accessToken),
+      ]);
+      // Move the rotation out of the grace window instead of waiting for it.
+      await t.connection
+        .collection('sessions')
+        .updateMany(
+          { userId: new Types.ObjectId(alice.user.id), rotatedAt: { $ne: null } },
+          { $set: { rotatedAt: new Date(Date.now() - 60_000) } },
+        );
+
+      const closed = Promise.all([nextDisconnect(before), nextDisconnect(after)]);
+      await request(t.url).post('/api/auth/refresh').set('Cookie', alice.cookies).expect(401);
+
+      expect(await closed).toEqual([SERVER_CLOSED, SERVER_CLOSED]);
     });
   });
 

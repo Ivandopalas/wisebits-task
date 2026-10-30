@@ -61,7 +61,7 @@ export class AuthService implements OnModuleInit {
     if (!user) {
       throw new UnauthorizedException('Session expired, please sign in again');
     }
-    return { response: await this.buildResponse(user), refresh };
+    return this.buildResult(user, refresh);
   }
 
   logout(refreshToken: string): Promise<void> {
@@ -77,15 +77,17 @@ export class AuthService implements OnModuleInit {
   }
 
   private async startSession(user: User & { _id: Types.ObjectId }): Promise<AuthResult> {
-    const refresh = await this.sessions.start(user._id);
-    return { response: await this.buildResponse(user), refresh };
+    return this.buildResult(user, await this.sessions.start(user._id));
   }
 
-  private async buildResponse(user: User): Promise<AuthResponse> {
-    const accessToken = await this.tokens.signAccess({
-      id: user._id.toString(),
-      username: user.username,
-    });
-    return { accessToken, expiresIn: this.tokens.accessTokenTtl, user: toMeDto(user) };
+  private async buildResult(user: User, refresh: IssuedRefreshToken): Promise<AuthResult> {
+    const accessToken = await this.tokens.signAccess(
+      { id: user._id.toString(), username: user.username },
+      refresh.familyId,
+    );
+    return {
+      response: { accessToken, expiresIn: this.tokens.accessTokenTtl, user: toMeDto(user) },
+      refresh,
+    };
   }
 }

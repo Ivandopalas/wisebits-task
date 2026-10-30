@@ -6,7 +6,13 @@ import request from 'supertest';
 import { ADAPTER_COLLECTION } from '../src/realtime/mongo-io.adapter.js';
 import { RealtimeService } from '../src/realtime/realtime.service.js';
 import { createTestApp, type TestApp } from './helpers/app.js';
-import { connect, disconnectAll, nextEvent, type ClientSocket } from './helpers/sockets.js';
+import {
+  connect,
+  disconnectAll,
+  nextDisconnect,
+  nextEvent,
+  type ClientSocket,
+} from './helpers/sockets.js';
 import { registerUser } from './helpers/users.js';
 import { fakeWebm } from './helpers/videos.js';
 
@@ -134,6 +140,15 @@ describe('two API instances', () => {
       .set('Cookie', user.cookies)
       .expect(200);
     expect(refreshed.body.user.id).toBe(user.user.id);
+  });
+
+  it('ends a session on every instance: logout on one closes its sockets on the other', async () => {
+    const user = await registerUser(one.url);
+    const socket = await connect(two.url, user.accessToken);
+
+    const closed = nextDisconnect(socket, 5000);
+    await request(one.url).post('/api/auth/logout').set('Cookie', user.cookies).expect(204);
+    expect(await closed).toBe('io server disconnect');
   });
 
   // Runs last: the instances keep counting the silent node for the rest of the file.

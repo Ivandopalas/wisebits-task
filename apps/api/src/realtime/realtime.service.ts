@@ -5,6 +5,9 @@ import type { Server } from 'socket.io';
 export interface SocketData {
   userId: string;
   username: string;
+  sessionId: string;
+  /** When the access token the socket connected with expires, in milliseconds since the epoch. */
+  tokenExpiresAt: number;
 }
 
 /** Requests between API instances; they travel through the adapter and never reach clients. */
@@ -22,6 +25,9 @@ type EventArgs<E extends keyof ServerToClientEvents> = Parameters<ServerToClient
 
 /** Every socket of a user joins this room: one emit reaches all their tabs on all instances. */
 export const userRoom = (userId: string) => `user:${userId}`;
+
+/** Every socket of one sign-in joins this room: ending the session reaches all of them. */
+export const sessionRoom = (sessionId: string) => `session:${sessionId}`;
 
 /**
  * Lets services push events without depending on the gateway. With the MongoDB adapter an emit
@@ -51,6 +57,11 @@ export class RealtimeService {
 
   emitToAll<E extends keyof ServerToClientEvents>(event: E, ...args: EventArgs<E>) {
     this.server?.emit(event, ...args);
+  }
+
+  /** Closes the sockets of a session, on whichever instance holds them. */
+  disconnectSession(sessionId: string) {
+    this.server?.in(sessionRoom(sessionId)).disconnectSockets(true);
   }
 
   /**
