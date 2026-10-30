@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types, type HydratedDocument } from 'mongoose';
+import { Types } from 'mongoose';
 
 @Schema({ _id: false })
 export class LastMessage {
@@ -57,7 +57,6 @@ export class Conversation {
   createdAt: Date;
 }
 
-export type ConversationDocument = HydratedDocument<Conversation>;
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 ConversationSchema.index({ participants: 1, lastActivityAt: -1, _id: -1 });
 

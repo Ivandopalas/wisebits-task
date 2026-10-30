@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types, type HydratedDocument } from 'mongoose';
+import { Types } from 'mongoose';
 
 @Schema({ collection: 'messages', timestamps: { createdAt: true, updatedAt: false } })
 export class Message {
@@ -25,7 +25,6 @@ export class Message {
   createdAt: Date;
 }
 
-export type MessageDocument = HydratedDocument<Message>;
 export const MessageSchema = SchemaFactory.createForClass(Message);
 MessageSchema.index({ conversationId: 1, seq: 1 }, { unique: true });
 MessageSchema.index({ senderId: 1, clientMessageId: 1 }, { unique: true });

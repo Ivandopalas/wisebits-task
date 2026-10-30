@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types, type HydratedDocument } from 'mongoose';
+import { Types } from 'mongoose';
 
 /**
  * One refresh token. Every refresh rotates the token: the old row is marked `rotatedAt`
@@ -32,5 +32,4 @@ export class Session {
   createdAt: Date;
 }
 
-export type SessionDocument = HydratedDocument<Session>;
 export const SessionSchema = SchemaFactory.createForClass(Session);

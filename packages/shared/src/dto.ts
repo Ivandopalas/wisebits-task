@@ -4,8 +4,6 @@ import { STORY_MIME_TYPES } from './limits.js';
 // Response shapes. The types are what both sides compile against; the schemas document the
 // API in OpenAPI and are not used to parse responses.
 
-/** Dates travel as ISO strings. */
-export type IsoDate = string;
 const isoDate = z.iso.datetime();
 
 export const apiErrorSchema = z
@@ -68,7 +66,6 @@ export type MessagesPage = z.infer<typeof messagesPageSchema>;
 export const lastMessageDtoSchema = messageDtoSchema
   .pick({ id: true, seq: true, senderId: true, text: true, createdAt: true })
   .meta({ id: 'LastMessage' });
-export type LastMessageDto = z.infer<typeof lastMessageDtoSchema>;
 
 export const conversationDtoSchema = z
   .object({
