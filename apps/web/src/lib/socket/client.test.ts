@@ -54,7 +54,7 @@ vi.mock('socket.io-client', () => ({
   },
 }));
 
-const { closeSocket, connection, openSocket } = await import('./client.js');
+const { closeSocket, connection, openSocket, request } = await import('./client.js');
 
 function setup() {
   const options = {
@@ -125,6 +125,74 @@ describe('chat socket', () => {
 
     expect(get(connection)).toBe('offline');
     expect(options.refresh).not.toHaveBeenCalled();
+  });
+
+  describe('when the browser reports the network gone', () => {
+    function goOffline() {
+      browser.onLine = false;
+      window.dispatchEvent(new Event('offline'));
+    }
+
+    it('drops the connection at once instead of waiting for the ping timeout', () => {
+      const { options, socket } = setup();
+      socket.open();
+
+      goOffline();
+
+      expect(socket.connected).toBe(false);
+      expect(get(connection)).toBe('offline');
+    });
+
+    it('reports it while a connection attempt is still under way, too', () => {
+      setup();
+      expect(get(connection)).toBe('connecting');
+
+      goOffline();
+
+      expect(get(connection)).toBe('offline');
+    });
+
+    it('fails requests at once rather than after the ack timeout', async () => {
+      const { socket } = setup();
+      socket.open();
+      goOffline();
+
+      await expect(request('conversation:read', { conversationId: 'c1', seq: 1 })).rejects.toThrow(
+        'Not connected',
+      );
+      expect(socket.timeout).not.toHaveBeenCalled();
+    });
+
+    it('does not try to connect from a tab brought back to the front', () => {
+      const { socket } = setup();
+      socket.open();
+      goOffline();
+
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(socket.connect).not.toHaveBeenCalled();
+    });
+
+    it('reconnects when the network is back, even in a hidden tab', () => {
+      const { socket } = setup();
+      socket.open();
+      goOffline();
+      page.visibilityState = 'hidden';
+
+      browser.onLine = true;
+      window.dispatchEvent(new Event('online'));
+
+      expect(socket.connect).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('retries at once when the user returns to the tab, not after the backoff', () => {
+    const { socket } = setup();
+    socket.fire('connect_error', new Error('websocket error'));
+
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(socket.connect).toHaveBeenCalledOnce();
   });
 
   it('tells which connections are resumed ones', () => {

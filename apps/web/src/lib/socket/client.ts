@@ -52,17 +52,30 @@ export function openSocket(options: SocketOptions): ChatSocket {
   socket = instance;
   connection.set('connecting');
 
-  // Back online, or back on the tab after the phone slept: retry now, not after the backoff.
+  // The browser knows the network is gone: close now rather than notice by the ping timeout,
+  // 45 s later, and leave the retries until it is back.
+  const dropConnection = () => {
+    instance.disconnect();
+    connection.set('offline');
+  };
   const reconnectNow = () => {
-    if (!instance.connected && document.visibilityState === 'visible') {
+    if (!instance.connected) {
       instance.disconnect().connect();
     }
   };
+  // Back on the tab after the phone slept: retry now, not after the backoff.
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      reconnectNow();
+    }
+  };
+  window.addEventListener('offline', dropConnection);
   window.addEventListener('online', reconnectNow);
-  document.addEventListener('visibilitychange', reconnectNow);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   detachListeners = () => {
+    window.removeEventListener('offline', dropConnection);
     window.removeEventListener('online', reconnectNow);
-    document.removeEventListener('visibilitychange', reconnectNow);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 
   instance.on('connect', () => {
@@ -114,9 +127,12 @@ type AckEvent = 'message:send' | 'conversation:read' | 'presence:query';
 type Payload<E extends AckEvent> = Parameters<ClientToServerEvents[E]>[0];
 type AckResult<E extends AckEvent> = Parameters<Parameters<ClientToServerEvents[E]>[1]>[0];
 
-/** Emits with an acknowledgement; rejects if the server does not answer in time. */
+/**
+ * Emits with an acknowledgement; rejects if the server does not answer in time. While socket.io
+ * is reconnecting the event waits for it; with nothing under way there is nothing to wait for.
+ */
 export function request<E extends AckEvent>(event: E, payload: Payload<E>): Promise<AckResult<E>> {
-  if (!socket) {
+  if (!socket?.active) {
     return Promise.reject(new Error('Not connected'));
   }
   // The typed overloads cannot follow a generic event name; the signature above restores types.

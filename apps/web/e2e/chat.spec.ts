@@ -65,23 +65,19 @@ test('two people chat in real time, both ways, without reloading', async ({ brow
   await bob.context.close();
 });
 
-test('a dropped connection recovers: missed messages arrive, queued ones are delivered', async ({
+test('a lost network shows at once and recovers: missed messages arrive, queued ones go out', async ({
   browser,
 }) => {
   const alice = await signedInUser(browser);
   const bob = await signedInUser(browser);
 
-  // Offline emulation alone leaves an open WebSocket alive, so Alice's socket goes through a
-  // route that can cut it and refuse new connections, like a real network drop.
-  let networkUp = true;
-  const liveSockets: WebSocketRoute[] = [];
+  // Lets one send hang, to catch it on its way when the network goes.
+  let holdSends = false;
   await alice.page.routeWebSocket(/\/socket\.io\//, (ws) => {
-    if (!networkUp) {
-      void ws.close();
-      return;
-    }
-    ws.connectToServer();
-    liveSockets.push(ws);
+    const server = ws.connectToServer();
+    ws.onMessage((frame) => {
+      if (!holdSends || !String(frame).includes('message:send')) server.send(frame);
+    });
   });
   await alice.page.reload();
 
@@ -90,33 +86,40 @@ test('a dropped connection recovers: missed messages arrive, queued ones are del
   await openConversationWith(bob, alice);
   await expect(messageList(bob.page)).toContainText('before the outage');
 
-  networkUp = false;
+  holdSends = true;
+  await sendMessage(alice.page, 'on its way when the network went');
+  const onItsWay = messageList(alice.page)
+    .getByTestId('message')
+    .filter({ hasText: 'on its way when the network went' });
+  await expect(onItsWay).toHaveAttribute('data-status', 'sending');
+
+  // Long before the ping timeout, which is the only other way to find out.
   await alice.context.setOffline(true);
-  await Promise.all(liveSockets.splice(0).map((ws) => ws.close()));
-  await expect(alice.page.getByTestId('connection-banner')).toBeVisible();
+  await expect(onItsWay).toHaveAttribute('data-status', 'failed', { timeout: 1000 });
+  await expect(alice.page.getByTestId('connection-banner')).toBeVisible({ timeout: 5000 });
 
   await sendMessage(bob.page, 'sent while Alice was offline');
   await sendMessage(alice.page, 'typed while offline');
   const queued = messageList(alice.page)
     .getByTestId('message')
     .filter({ hasText: 'typed while offline' });
-  await expect(queued).not.toHaveAttribute('data-status', 'sent');
 
-  // No acknowledgement in time: the bubble says so, stays readable and offers a retry.
-  await expect(queued).toHaveAttribute('data-status', 'failed', { timeout: 15_000 });
+  // It cannot go anywhere: the bubble says so right away, stays readable and offers a retry.
+  await expect(queued).toHaveAttribute('data-status', 'failed', { timeout: 1000 });
   const retry = queued.getByRole('button', { name: 'Retry' });
   await expect(retry).toBeVisible();
   expect(await contrastRatio(queued.getByText('typed while offline'))).toBeGreaterThan(4.5);
   expect(await contrastRatio(retry)).toBeGreaterThan(4.5);
 
-  networkUp = true;
+  holdSends = false;
   await alice.context.setOffline(false);
   await expect(alice.page.getByTestId('connection-banner')).toBeHidden({ timeout: 20_000 });
   await expect(messageList(alice.page)).toContainText('sent while Alice was offline');
   await expect(queued).toHaveAttribute('data-status', 'sent', { timeout: 20_000 });
-  await expect(messageList(bob.page)).toContainText('typed while offline');
-  // Delivered exactly once despite the retry.
+  await expect(onItsWay).toHaveAttribute('data-status', 'sent');
+  // Delivered exactly once despite the retries.
   await expect(messageList(bob.page).getByText('typed while offline')).toHaveCount(1);
+  await expect(messageList(bob.page).getByText('on its way when the network went')).toHaveCount(1);
 
   await alice.context.close();
   await bob.context.close();
