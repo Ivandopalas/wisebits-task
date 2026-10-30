@@ -165,7 +165,7 @@ describe('two API instances', () => {
     // instance looks like to the rest of the cluster in the seconds after it crashes.
     const silent = new Server();
     silent.adapter(
-      createAdapter(one.connection.db!.collection(ADAPTER_COLLECTION) as never, {
+      createAdapter(one.connection.db!.collection(ADAPTER_COLLECTION), {
         heartbeatInterval: 1000,
       }),
     );

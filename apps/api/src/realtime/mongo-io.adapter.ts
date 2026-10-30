@@ -37,7 +37,7 @@ export class MongoIoAdapter extends IoAdapter {
       }
     }
     // A fresh object: createAdapter writes the node's uid into the options it is given.
-    this.adapter = createAdapter(db.collection(ADAPTER_COLLECTION) as never, { ...CLUSTER_TIMING });
+    this.adapter = createAdapter(db.collection(ADAPTER_COLLECTION), { ...CLUSTER_TIMING });
   }
 
   override createIOServer(port: number, options?: ServerOptions): Server {
