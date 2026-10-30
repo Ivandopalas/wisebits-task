@@ -160,6 +160,22 @@ describe('stories', () => {
       const items = await feed(me);
       expect(items.find((i) => i.author.id === fresh.user.id)?.stories[0]?.id).toBe(latest.id);
     });
+
+    it('reads the newest stories off the index, without sorting them in memory', async () => {
+      const user = await registerUser(t.url);
+      await upload(user, fakeWebm()).expect(201);
+
+      const db = t.connection.db!;
+      await db.command({ profile: 2 });
+      await feed(user);
+      await db.command({ profile: 0 });
+
+      const read = await db
+        .collection('system.profile')
+        .findOne({ ns: `${db.databaseName}.stories`, op: 'query' });
+      expect(read?.planSummary).toBe('IXSCAN { expiresAt: 1 }');
+      expect(read?.hasSortStage).toBeUndefined();
+    });
   });
 
   describe('video playback', () => {

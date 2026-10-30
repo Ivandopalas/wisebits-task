@@ -84,9 +84,11 @@ export class StoriesService {
   /** Authors with live stories: mine first, then those with something unseen, newest first. */
   async feed(viewerId: string): Promise<StoryFeedItem[]> {
     const now = new Date();
+    // Every story lives the same time, so the last to expire are the newest, and the TTL index
+    // hands them over in that order without a sort in memory.
     const newest = await this.stories
       .find({ expiresAt: { $gt: now } })
-      .sort({ createdAt: -1 })
+      .sort({ expiresAt: -1 })
       .limit(FEED_LIMIT)
       .lean()
       .exec();
