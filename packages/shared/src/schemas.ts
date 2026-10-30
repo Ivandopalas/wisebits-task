@@ -42,7 +42,12 @@ const limitSchema = z.coerce
   .default(LIMITS.pageSizeDefault);
 
 export const listUsersQuerySchema = z.strictObject({
-  q: z.string().trim().max(LIMITS.usernameMax).optional(),
+  q: z
+    .string()
+    .trim()
+    .max(LIMITS.usernameMax)
+    .regex(/^\P{Cc}*$/u, 'Search cannot contain control characters')
+    .optional(),
   cursor: z.string().max(LIMITS.usernameMax).optional(),
   limit: limitSchema,
 });
@@ -76,7 +81,8 @@ export const messageTextSchema = z
   .string()
   .trim()
   .min(1, 'Message cannot be empty')
-  .max(LIMITS.messageMaxLength, `Message must be at most ${LIMITS.messageMaxLength} characters`);
+  .max(LIMITS.messageMaxLength, `Message must be at most ${LIMITS.messageMaxLength} characters`)
+  .regex(/^(?:\P{Cc}|[\t\n\r])*$/u, 'Message cannot contain control characters');
 
 export const sendMessageSchema = z.strictObject({
   text: messageTextSchema,

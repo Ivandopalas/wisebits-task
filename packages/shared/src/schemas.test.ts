@@ -58,6 +58,18 @@ describe('sendMessageSchema', () => {
     expect(sendMessageSchema.safeParse({ text: '   ', clientMessageId }).success).toBe(false);
   });
 
+  it.each(['a\u0000b', 'a\u0007b', 'a\u001bb', 'a\u007fb', 'a\u0085b'])(
+    'rejects the control character in %j',
+    (text) => {
+      expect(sendMessageSchema.safeParse({ text, clientMessageId }).success).toBe(false);
+    },
+  );
+
+  it('keeps line breaks and tabs', () => {
+    const text = 'one\r\n\ttwo\nthree';
+    expect(sendMessageSchema.parse({ text, clientMessageId }).text).toBe(text);
+  });
+
   it('requires a uuid client id', () => {
     expect(sendMessageSchema.safeParse({ text: 'hi', clientMessageId: '42' }).success).toBe(false);
   });

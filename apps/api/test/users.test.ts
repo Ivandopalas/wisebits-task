@@ -67,6 +67,10 @@ describe('users', () => {
     await list({ unknown: 1 }).expect(400);
   });
 
+  it('answers 400, not 500, to a search with control characters', async () => {
+    await list({ q: 'a\u0000b' }).expect(400);
+  });
+
   it('returns a single user and 404 or 400 for bad ids', async () => {
     const other = await registerUser(t.url);
     const res = await request(t.url)

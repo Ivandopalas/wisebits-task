@@ -127,6 +127,7 @@ describe('messages', () => {
     await send(alice, conversationId, '   ').expect(400);
     await send(alice, conversationId, 'x'.repeat(4001)).expect(400);
     await send(alice, conversationId, 'x'.repeat(4000)).expect(201);
+    await send(alice, conversationId, 'a\u0000b').expect(400);
     await request(t.url)
       .post(`/api/conversations/${conversationId}/messages`)
       .set(alice.auth)
