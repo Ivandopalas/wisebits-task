@@ -93,6 +93,7 @@ export type SendMessageInput = z.input<typeof sendMessageSchema>;
 export const markReadSchema = z.strictObject({
   seq: z.number().int().min(1),
 });
+export type MarkReadInput = z.input<typeof markReadSchema>;
 
 export const wsSendMessageSchema = sendMessageSchema.extend({ conversationId: objectIdSchema });
 export type WsSendMessagePayload = z.input<typeof wsSendMessageSchema>;

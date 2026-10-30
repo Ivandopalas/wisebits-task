@@ -25,6 +25,7 @@ import {
   objectIdSchema,
   sendMessageSchema,
   type ListMessagesQuery,
+  type MarkReadInput,
   type SendMessageInput,
 } from '@chat/shared';
 import type { Response } from 'express';
@@ -75,7 +76,7 @@ export class MessagesController {
   @HttpCode(HttpStatus.OK)
   markRead(
     @Param('id', { schema: objectIdSchema }) id: string,
-    @Body({ schema: markReadSchema }) body: { seq: number },
+    @Body({ schema: markReadSchema }) body: MarkReadInput,
     @CurrentUser() user: AuthUser,
   ) {
     return this.messages.markRead(id, user.id, body.seq);
