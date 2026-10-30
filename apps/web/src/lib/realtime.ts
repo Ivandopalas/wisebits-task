@@ -84,7 +84,8 @@ export async function syncPresence(userIds = get(conversations).items.map((c) =>
 }
 
 export function sendTyping(conversationId: string, isTyping: boolean): void {
-  currentSocket()?.emit('typing', { conversationId, isTyping });
+  // Volatile: useless once late, so it is dropped rather than queued while disconnected.
+  currentSocket()?.volatile.emit('typing', { conversationId, isTyping });
 }
 
 export function markRead(conversationId: string, seq: number): void {

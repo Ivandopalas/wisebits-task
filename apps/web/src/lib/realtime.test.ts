@@ -7,6 +7,7 @@ const socket = vi.hoisted(() => ({
   on: vi.fn(),
   open: vi.fn(),
   request: vi.fn(),
+  current: null as unknown,
 }));
 
 vi.mock('./socket/client.js', async () => {
@@ -15,12 +16,13 @@ vi.mock('./socket/client.js', async () => {
     connection: writable('idle'),
     openSocket: socket.open,
     closeSocket: vi.fn(),
-    currentSocket: () => socket,
+    currentSocket: () => socket.current ?? socket,
     request: socket.request,
   };
 });
 
-const { PRESENCE_RESYNC_MS, startRealtime, stopRealtime } = await import('./realtime.js');
+const { PRESENCE_RESYNC_MS, sendTyping, startRealtime, stopRealtime } =
+  await import('./realtime.js');
 const { conversations } = await import('./stores/conversations.js');
 const { presence } = await import('./stores/presence.js');
 const { typing } = await import('./stores/typing.js');
@@ -92,6 +94,17 @@ describe('realtime', () => {
     socket.open.mock.lastCall![0].onConnectionLost();
 
     expect(get(presence)).toEqual({});
+  });
+
+  it('does not queue typing events for after an outage', async () => {
+    const { io } = await import('socket.io-client');
+    const unconnected = io('http://localhost', { autoConnect: false });
+    socket.current = unconnected;
+
+    sendTyping(conversation.id, true);
+
+    expect(unconnected.sendBuffer).toEqual([]);
+    socket.current = null;
   });
 
   it('takes "typing…" down when the message it announced arrives', () => {
