@@ -92,13 +92,19 @@ export const storyDtoSchema = z
     sizeBytes: z.number().int(),
     createdAt: isoDate,
     expiresAt: isoDate,
-    videoUrl: z.string().meta({
-      description: 'Short-lived signed URL: a <video> element cannot send an Authorization header',
-    }),
     viewed: z.boolean(),
   })
   .meta({ id: 'Story' });
 export type StoryDto = z.infer<typeof storyDtoSchema>;
+
+export const storyPlaybackDtoSchema = z
+  .object({
+    videoUrl: z.string().meta({
+      description: 'Short-lived signed URL: a <video> element cannot send an Authorization header',
+    }),
+  })
+  .meta({ id: 'StoryPlayback' });
+export type StoryPlaybackDto = z.infer<typeof storyPlaybackDtoSchema>;
 
 export const storyFeedItemSchema = z
   .object({

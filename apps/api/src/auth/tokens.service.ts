@@ -57,15 +57,19 @@ export class TokensService {
     };
   }
 
-  /** Grants one user access to one story video until the earlier of the TTL and story expiry. */
-  signMedia(storyId: string, userId: string, storyExpiresAt: Date): Promise<string> {
+  /**
+   * Opens one story video to whoever holds the token, until the earlier of the TTL and story
+   * expiry. It names no user: a <video> request brings nothing to compare a name with, and every
+   * signed-in user may watch every story anyway.
+   */
+  signMedia(storyId: string, storyExpiresAt: Date): Promise<string> {
     const ttl = Math.min(
       this.config.get('MEDIA_TOKEN_TTL_SECONDS'),
       Math.floor((storyExpiresAt.getTime() - Date.now()) / 1000),
     );
     return this.jwt.signAsync(
       { story: storyId },
-      { subject: userId, audience: MEDIA_AUDIENCE, expiresIn: Math.max(ttl, 1) },
+      { audience: MEDIA_AUDIENCE, expiresIn: Math.max(ttl, 1) },
     );
   }
 

@@ -34,6 +34,7 @@ import {
   STORY_MIME_TYPES,
   storyDtoSchema,
   storyFeedItemSchema,
+  storyPlaybackDtoSchema,
   storyVideoQuerySchema,
   type CreateStoryInput,
   type StoryVideoQuery,
@@ -95,6 +96,13 @@ export class StoriesController {
   }
 
   @ApiBearerAuth()
+  @ApiOkResponse({ standardSchema: storyPlaybackDtoSchema })
+  @Get(':id/playback')
+  playback(@Param('id', { schema: objectIdSchema }) id: string) {
+    return this.stories.playback(id);
+  }
+
+  @ApiBearerAuth()
   @ApiNoContentResponse()
   @Post(':id/view')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -112,7 +120,7 @@ export class StoriesController {
 
   /**
    * Streams the video with HTTP Range support: browsers (Safari above all) need 206 responses to
-   * play and seek. Authorized by the signed token from the feed, since <video> sends no headers.
+   * play and seek. Authorized by the token in the playback link, since <video> sends no headers.
    */
   @Public()
   @ApiOkResponse({ description: 'The whole file', content: VIDEO_CONTENT })

@@ -1,4 +1,4 @@
-import type { StoryDto } from '@chat/shared';
+import type { StoryDto, StoryPlaybackDto } from '@chat/shared';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import request from 'supertest';
@@ -141,7 +141,10 @@ describe('auth', () => {
           .expect(201)
       ).body as StoryDto;
 
-      const mediaToken = new URL(story.videoUrl, t.url).searchParams.get('token')!;
+      const { videoUrl } = (
+        await request(t.url).get(`/api/stories/${story.id}/playback`).set(user.auth).expect(200)
+      ).body as StoryPlaybackDto;
+      const mediaToken = new URL(videoUrl, t.url).searchParams.get('token')!;
       await request(t.url)
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${mediaToken}`)

@@ -1,5 +1,5 @@
 import { getModelToken } from '@nestjs/mongoose';
-import type { StoryDto, StoryFeedItem } from '@chat/shared';
+import type { StoryDto, StoryFeedItem, StoryPlaybackDto } from '@chat/shared';
 import { Types, type Model } from 'mongoose';
 import request from 'supertest';
 import { VideoStorage } from '../src/storage/video-storage.js';
@@ -36,6 +36,12 @@ describe('stories', () => {
   const feed = async (user: TestUser) =>
     (await request(t.url).get('/api/stories/feed').set(user.auth).expect(200))
       .body as StoryFeedItem[];
+
+  const videoUrl = async (user: TestUser, storyId: string) =>
+    (
+      (await request(t.url).get(`/api/stories/${storyId}/playback`).set(user.auth).expect(200))
+        .body as StoryPlaybackDto
+    ).videoUrl;
 
   const bucketFiles = () => t.connection.collection('videos.files');
 
@@ -183,32 +189,38 @@ describe('stories', () => {
       const user = await registerUser(t.url);
       const video = fakeWebm(10_000);
       const story = (await upload(user, video).expect(201)).body as StoryDto;
+      const url = await videoUrl(user, story.id);
 
-      const full = await getVideo(story.videoUrl).expect(200);
+      const full = await getVideo(url).expect(200);
       expect(full.headers['content-type']).toBe('video/webm');
       expect(full.headers['accept-ranges']).toBe('bytes');
       expect(Buffer.compare(full.body as Buffer, video)).toBe(0);
 
-      const part = await getVideo(story.videoUrl, 'bytes=100-199').expect(206);
+      const part = await getVideo(url, 'bytes=100-199').expect(206);
       expect(part.headers['content-range']).toBe('bytes 100-199/10000');
       expect(part.headers['content-length']).toBe('100');
       expect(Buffer.compare(part.body as Buffer, video.subarray(100, 200))).toBe(0);
 
-      const tail = await getVideo(story.videoUrl, 'bytes=-10').expect(206);
+      const tail = await getVideo(url, 'bytes=-10').expect(206);
       expect(Buffer.compare(tail.body as Buffer, video.subarray(-10))).toBe(0);
 
-      const outside = await request(t.url)
-        .get(story.videoUrl)
-        .set('Range', 'bytes=20000-')
-        .expect(416);
+      const outside = await request(t.url).get(url).set('Range', 'bytes=20000-').expect(416);
       expect(outside.headers['content-range']).toBe('bytes */10000');
+    });
+
+    it('gives the link to any signed-in user and nobody else', async () => {
+      const [author, viewer] = await Promise.all([registerUser(t.url), registerUser(t.url)]);
+      const story = (await upload(author, fakeWebm()).expect(201)).body as StoryDto;
+
+      await getVideo(await videoUrl(viewer, story.id)).expect(200);
+      await request(t.url).get(`/api/stories/${story.id}/playback`).expect(401);
     });
 
     it('needs a valid media token for this very story', async () => {
       const user = await registerUser(t.url);
       const a = (await upload(user, fakeWebm()).expect(201)).body as StoryDto;
       const b = (await upload(user, fakeWebm()).expect(201)).body as StoryDto;
-      const tokenOfB = new URL(b.videoUrl, t.url).searchParams.get('token')!;
+      const tokenOfB = new URL(await videoUrl(user, b.id), t.url).searchParams.get('token')!;
 
       await request(t.url).get(`/api/stories/${a.id}/video`).expect(400);
       await request(t.url).get(`/api/stories/${a.id}/video?token=garbage`).expect(401);
@@ -222,6 +234,7 @@ describe('stories', () => {
     it('never serves an expired story, even before the TTL monitor removes it', async () => {
       const [author, viewer] = await Promise.all([registerUser(t.url), registerUser(t.url)]);
       const story = (await upload(author, fakeWebm()).expect(201)).body as StoryDto;
+      const url = await videoUrl(viewer, story.id);
       await t.connection
         .collection('stories')
         .updateOne(
@@ -232,7 +245,8 @@ describe('stories', () => {
       expect((await feed(viewer)).some((i) => i.stories.some((s) => s.id === story.id))).toBe(
         false,
       );
-      await request(t.url).get(story.videoUrl).expect(404);
+      await request(t.url).get(url).expect(404);
+      await request(t.url).get(`/api/stories/${story.id}/playback`).set(viewer.auth).expect(404);
       await request(t.url).post(`/api/stories/${story.id}/view`).set(viewer.auth).expect(404);
     });
 

@@ -26,6 +26,7 @@
   let muted = $state(false);
   let error = $state<string | null>(null);
   let confirmingDelete = $state(false);
+  let videoUrl = $state<string | null>(null);
   let video = $state<HTMLVideoElement>();
 
   const item = $derived(feed[authorIndex]);
@@ -38,6 +39,23 @@
 
   $effect(() => {
     if (story && !story.viewed && !own) stories.markViewed(story.id);
+  });
+
+  $effect(() => {
+    if (!story) return;
+    let current = true;
+    videoUrl = null;
+    stories.videoUrl(story.id).then(
+      (url) => {
+        if (current) videoUrl = url;
+      },
+      (e) => {
+        if (current) error = errorMessage(e);
+      },
+    );
+    return () => {
+      current = false;
+    };
   });
 
   // Progress comes from the duration the recorder measured: some WebM files still report
@@ -138,10 +156,10 @@
     <div
       class="relative aspect-[9/16] h-full max-h-dvh w-full max-w-md overflow-hidden bg-black sm:rounded-2xl"
     >
-      {#key story.id}
+      {#if videoUrl}
         <video
           bind:this={video}
-          src={story.videoUrl}
+          src={videoUrl}
           class="h-full w-full object-cover"
           playsinline
           preload="auto"
@@ -151,7 +169,7 @@
           onerror={() => (error = 'This story could not be played.')}
           data-testid="story-video"
         ></video>
-      {/key}
+      {/if}
 
       <!-- Tap zones: left goes back, the rest goes forward. -->
       <button

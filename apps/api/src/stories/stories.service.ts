@@ -12,6 +12,7 @@ import {
   type StoryDto,
   type StoryFeedItem,
   type StoryMimeType,
+  type StoryPlaybackDto,
 } from '@chat/shared';
 import { fileTypeFromBuffer } from 'file-type';
 import { Model, Types } from 'mongoose';
@@ -78,7 +79,7 @@ export class StoriesService {
     }
 
     this.realtime.emitToAll('story:created', { storyId: story._id.toString(), authorId });
-    return this.toDto(story, authorId, false);
+    return this.toDto(story, false);
   }
 
   /** Authors with live stories: mine first, then those with something unseen, newest first. */
@@ -123,10 +124,8 @@ export class StoriesService {
       if (!author) {
         continue;
       }
-      const dtos = await Promise.all(
-        list.map((s) =>
-          this.toDto(s, viewerId, authorId === viewerId || viewedIds.has(s._id.toString())),
-        ),
+      const dtos = list.map((s) =>
+        this.toDto(s, authorId === viewerId || viewedIds.has(s._id.toString())),
       );
       items.push({
         author: toUserDto(author),
@@ -166,6 +165,16 @@ export class StoriesService {
     this.realtime.emitToAll('story:deleted', { storyId, authorId: userId });
   }
 
+  /**
+   * The link is made when a story is opened, not with the feed: the feed stays free of
+   * signatures, and a tab open for days has no link to go stale.
+   */
+  async playback(storyId: string): Promise<StoryPlaybackDto> {
+    const story = await this.findActive(storyId);
+    const token = await this.tokens.signMedia(storyId, story.expiresAt);
+    return { videoUrl: `/api/stories/${storyId}/video?token=${encodeURIComponent(token)}` };
+  }
+
   /** A story for playback: the signed media token stands in for the Authorization header. */
   async findPlayable(storyId: string, token: string): Promise<Story> {
     await this.tokens.verifyMedia(token, storyId);
@@ -187,18 +196,15 @@ export class StoriesService {
     return story;
   }
 
-  private async toDto(story: Story, viewerId: string, viewed: boolean): Promise<StoryDto> {
-    const id = story._id.toString();
-    const token = await this.tokens.signMedia(id, viewerId, story.expiresAt);
+  private toDto(story: Story, viewed: boolean): StoryDto {
     return {
-      id,
+      id: story._id.toString(),
       authorId: story.authorId.toString(),
       mimeType: story.mimeType,
       durationMs: story.durationMs,
       sizeBytes: story.sizeBytes,
       createdAt: story.createdAt.toISOString(),
       expiresAt: story.expiresAt.toISOString(),
-      videoUrl: `/api/stories/${id}/video?token=${encodeURIComponent(token)}`,
       viewed,
     };
   }

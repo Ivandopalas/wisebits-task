@@ -1,4 +1,4 @@
-import type { StoryDto, StoryFeedItem } from '@chat/shared';
+import type { StoryDto, StoryFeedItem, StoryPlaybackDto } from '@chat/shared';
 import { writable, type Readable } from 'svelte/store';
 import { api, ApiRequestError, errorMessage, parse } from '../api/http.js';
 import { auth } from './auth.js';
@@ -12,6 +12,7 @@ export interface StoriesState {
 
 export interface StoriesApi {
   feed(): Promise<StoryFeedItem[]>;
+  playback(storyId: string): Promise<StoryPlaybackDto>;
   markViewed(storyId: string): Promise<void>;
   remove(storyId: string): Promise<void>;
 }
@@ -20,6 +21,8 @@ export interface StoriesStore extends Readable<StoriesState> {
   load(): Promise<void>;
   /** A reload a little later, merged with any others asked for in the meantime. */
   reloadSoon(): void;
+  /** A fresh link to play a story with, asked for each time it is opened. */
+  videoUrl(storyId: string): Promise<string>;
   markViewed(storyId: string): void;
   /** Drops a story locally (deleted by its author, here or elsewhere). */
   remove(storyId: string): void;
@@ -73,6 +76,18 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
       }, Math.random() * RELOAD_SPREAD_MS);
     },
 
+    async videoUrl(storyId) {
+      try {
+        return (await client.playback(storyId)).videoUrl;
+      } catch (error) {
+        // Expired or deleted since the feed was loaded.
+        if (error instanceof ApiRequestError && error.status === 404) {
+          store.remove(storyId);
+        }
+        throw error;
+      }
+    },
+
     markViewed(storyId) {
       state.update((s) => ({
         ...s,
@@ -106,6 +121,7 @@ export function createStoriesStore(client: StoriesApi): StoriesStore {
 
 export const stories = createStoriesStore({
   feed: () => api<StoryFeedItem[]>('/stories/feed'),
+  playback: (storyId) => api<StoryPlaybackDto>(`/stories/${storyId}/playback`),
   markViewed: (storyId) => api<void>(`/stories/${storyId}/view`, { method: 'POST' }),
   remove: (storyId) => api<void>(`/stories/${storyId}`, { method: 'DELETE' }),
 });
