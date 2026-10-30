@@ -31,7 +31,8 @@
           <Avatar username={$currentUser?.username ?? '?'} size="lg" ring="seen" />
         </button>
       {:else}
-        <a href={resolve('/(app)/stories/new')} aria-label="Record a story">
+        <!-- For the mouse: the + next to it leads to the same page and takes the keyboard stop. -->
+        <a href={resolve('/(app)/stories/new')} tabindex="-1" aria-hidden="true">
           <Avatar username={$currentUser?.username ?? '?'} size="lg" />
         </a>
       {/if}
