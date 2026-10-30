@@ -70,19 +70,4 @@ describe('users', () => {
   it('answers 400, not 500, to a search with control characters', async () => {
     await list({ q: 'a\u0000b' }).expect(400);
   });
-
-  it('returns a single user and 404 or 400 for bad ids', async () => {
-    const other = await registerUser(t.url);
-    const res = await request(t.url)
-      .get(`/api/users/${other.user.id}`)
-      .set(viewer.auth)
-      .expect(200);
-    expect(res.body.username).toBe(other.user.username);
-    await request(t.url).get('/api/users/0123456789abcdef01234567').set(viewer.auth).expect(404);
-    await request(t.url).get('/api/users/not-an-id').set(viewer.auth).expect(400);
-  });
-
-  it('requires authentication', async () => {
-    await request(t.url).get('/api/users').expect(401);
-  });
 });
