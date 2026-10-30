@@ -87,8 +87,8 @@ export class ChatGateway
 
   // Every log line carries the instance id, so these show which replica holds whom.
   async handleConnection(socket: ChatSocket) {
-    const { userId, sessionId, tokenExpiresAt } = socket.data;
-    this.logger.log({ userId, socketId: socket.id }, 'Socket connected');
+    const { userId, username, sessionId, tokenExpiresAt } = socket.data;
+    this.logger.log({ userId, username, socketId: socket.id }, 'Socket connected');
     // The token is only read at the handshake, and pings would keep the connection up forever.
     // The client comes back with a fresh token; a stolen one stops working when it expires.
     const expiry = setTimeout(() => socket.disconnect(true), tokenExpiresAt - Date.now());
@@ -101,11 +101,11 @@ export class ChatGateway
     this.limiter.forget(socket.id);
     clearTimeout(this.expiryTimers.get(socket.id));
     this.expiryTimers.delete(socket.id);
-    const { userId } = socket.data;
+    const { userId, username } = socket.data;
     if (!userId) {
       return;
     }
-    this.logger.log({ userId, socketId: socket.id }, 'Socket disconnected');
+    this.logger.log({ userId, username, socketId: socket.id }, 'Socket disconnected');
     // Shutting down closes every socket here; their users are already reconnecting elsewhere.
     if (this.closing) {
       return;
